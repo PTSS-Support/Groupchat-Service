@@ -1,0 +1,18 @@
+  #Server Configuration
+  port: 8080
+  allowed_origins:
+
+    http://localhost:3000
+    https://yourapp.com
+    
+  #Database Configuration
+  database_url: "postgresql://username:password@localhost/fcm_microservice?sslmode=disable"
+  
+  #Security
+  jwt_secret: "your-secret-key-here"
+
+  #Firebase Cloud Messaging
+  fcm_server_key: "your-fcm-server-key"
+
+  #Logging
+  log_level: "info"
