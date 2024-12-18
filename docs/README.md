@@ -8,7 +8,7 @@ Groupchat service for PTSS Support, built with Go and FCM
 ## Getting started
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone <https://github.com/PTSS-Support/Groupchat-Service.git>
    cd Groupchat-Service
    ```
 
