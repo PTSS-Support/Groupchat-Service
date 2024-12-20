@@ -2,135 +2,148 @@ package repository
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"time"
 
 	"Groupchat-Service/internal/models"
-
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	"github.com/google/uuid"
 )
 
-type MessageRepository interface {
-	CreateMessage(ctx context.Context, message *models.Message) error
-	GetGroupMessages(ctx context.Context, groupID uuid.UUID, opts MessageQueryOptions) ([]models.Message, string, error)
-	PinMessage(ctx context.Context, messageID uuid.UUID, isPinned bool) error
+// AzureMessageRepository implements MessageRepository using Azure Table Storage
+type AzureMessageRepository struct {
+	client *aztables.ServiceClient
+	table  *aztables.Client
 }
 
-type PostgresMessageRepository struct {
-	db *sql.DB
+// MessageEntity represents how we store messages in Azure Tables
+type MessageEntity struct {
+	aztables.Entity           // Embedded Entity for PartitionKey and RowKey
+	GroupID         string    `json:"GroupID"`
+	SenderID        string    `json:"SenderID"`
+	SenderName      string    `json:"SenderName"`
+	Content         string    `json:"Content"`
+	SentAt          time.Time `json:"SentAt"`
+	IsPinned        bool      `json:"IsPinned"`
 }
 
-type MessageQueryOptions struct {
-	Limit     int
-	Cursor    string
-	Direction string
-	Search    string
+// NewAzureMessageRepository creates a new message repository
+func NewAzureMessageRepository(client *aztables.ServiceClient) (*AzureMessageRepository, error) {
+	table := client.NewClient(MessagesTable)
+
+	// Check if table exists and create it if it doesn't
+	_, err := table.CreateTable(context.Background(), nil)
+	if err != nil {
+		// Check if error is "TableAlreadyExists"
+		if azerr, ok := err.(*azcore.ResponseError); ok && azerr.ErrorCode == "TableAlreadyExists" {
+			// Table exists, which is fine
+		} else {
+			return nil, fmt.Errorf("failed to create messages table: %w", err)
+		}
+	}
+
+	return &AzureMessageRepository{
+		client: client,
+		table:  table,
+	}, nil
 }
 
-func NewMessageRepository(db *sql.DB) *PostgresMessageRepository {
-	return &PostgresMessageRepository{db: db}
+func (r *AzureMessageRepository) CreateMessage(ctx context.Context, message *models.Message) error {
+	// Use GroupID as PartitionKey for efficient querying of messages in a group
+	// Use a timestamp-based RowKey for natural ordering
+	// Format: {timestamp}-{messageID} to ensure uniqueness
+	timestampPrefix := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	entity := MessageEntity{
+		Entity: aztables.Entity{
+			PartitionKey: message.GroupID.String(),
+			RowKey:       fmt.Sprintf("%s-%s", timestampPrefix, message.ID.String()),
+		},
+		GroupID:    message.GroupID.String(),
+		SenderID:   message.SenderID.String(),
+		SenderName: message.SenderName,
+		Content:    message.Content,
+		SentAt:     message.SentAt,
+		IsPinned:   message.IsPinned,
+	}
+
+	marshalled, err := json.Marshal(entity)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message entity: %w", err)
+	}
+
+	_, err = r.table.AddEntity(ctx, marshalled, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create message: %w", err)
+	}
+
+	return nil
 }
 
-func (r *PostgresMessageRepository) CreateMessage(ctx context.Context, message *models.Message) error {
-	query := `
-        INSERT INTO group_messages 
-        (group_id, sender_id, sender_name, content, sent_at) 
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-    `
-
-	err := r.db.QueryRowContext(ctx, query,
-		message.GroupID,
-		message.SenderID,
-		message.SenderName,
-		message.Content,
-		time.Now().UTC(),
-	).Scan(&message.ID)
-
-	return err
-}
-
-func (r *PostgresMessageRepository) GetGroupMessages(
+func (r *AzureMessageRepository) GetGroupMessages(
 	ctx context.Context,
 	groupID uuid.UUID,
 	opts MessageQueryOptions,
 ) ([]models.Message, string, error) {
-
-	// Validate inputs
 	if opts.Limit <= 0 || opts.Limit > 100 {
-		opts.Limit = 50 // Apply sensible default
-	}
-	if opts.Direction != "next" && opts.Direction != "previous" {
-		opts.Direction = "next" // Default direction
+		opts.Limit = 50 // Default limit
 	}
 
-	// Build the query
-	query := `
-        SELECT id, sender_id, sender_name, content, sent_at, is_pinned 
-        FROM group_messages 
-        WHERE group_id = $1
-    `
-	params := []interface{}{groupID}
-	paramIndex := 2 // Keep track of positional parameter placeholders
+	// Build filter for the specific group
+	filter := fmt.Sprintf("PartitionKey eq '%s'", groupID.String())
 
-	// Add cursor-based pagination
+	// Add cursor-based filtering if provided
 	if opts.Cursor != "" {
 		if opts.Direction == "next" {
-			query += fmt.Sprintf(" AND sent_at < $%d", paramIndex)
-		} else { // opts.Direction == "previous"
-			query += fmt.Sprintf(" AND sent_at > $%d", paramIndex)
+			filter += fmt.Sprintf(" and RowKey lt '%s'", opts.Cursor)
+		} else {
+			filter += fmt.Sprintf(" and RowKey gt '%s'", opts.Cursor)
 		}
-		params = append(params, opts.Cursor)
-		paramIndex++
 	}
 
-	// Add ordering and limit
-	query += fmt.Sprintf(" ORDER BY sent_at %s LIMIT $%d", "DESC", paramIndex)
-	params = append(params, opts.Limit)
-
-	// Execute query
-	rows, err := r.db.QueryContext(ctx, query, params...)
-	if err != nil {
-		return nil, "", err
+	// Configure paging options
+	pageSize := int32(opts.Limit) // Convert to int32 as required by Azure SDK
+	options := &aztables.ListEntitiesOptions{
+		Filter: &filter,
+		Top:    &pageSize,
 	}
-	defer rows.Close()
 
-	// Parse results
+	pager := r.table.NewListEntitiesPager(options)
+
 	var messages []models.Message
-	for rows.Next() {
-		var message models.Message
-		if err := rows.Scan(&message.ID, &message.SenderID, &message.SenderName, &message.Content, &message.SentAt, &message.IsPinned); err != nil {
-			return nil, "", err
+	var lastRowKey string
+
+	for pager.More() && len(messages) < opts.Limit {
+		response, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to list messages: %w", err)
 		}
-		messages = append(messages, message)
+
+		for _, entity := range response.Entities {
+			var messageEntity MessageEntity
+			if err := json.Unmarshal(entity, &messageEntity); err != nil {
+				return nil, "", fmt.Errorf("failed to unmarshal message: %w", err)
+			}
+
+			groupID, _ := uuid.Parse(messageEntity.GroupID)
+			senderID, _ := uuid.Parse(messageEntity.SenderID)
+			messageID, _ := uuid.Parse(messageEntity.Entity.RowKey)
+
+			message := models.Message{
+				ID:         messageID,
+				GroupID:    groupID,
+				SenderID:   senderID,
+				SenderName: messageEntity.SenderName,
+				Content:    messageEntity.Content,
+				SentAt:     messageEntity.SentAt,
+				IsPinned:   messageEntity.IsPinned,
+			}
+			messages = append(messages, message)
+			lastRowKey = messageEntity.RowKey
+		}
 	}
 
-	// Check for rows errors
-	if err := rows.Err(); err != nil {
-		return nil, "", err
-	}
-
-	// Generate nextCursor (if messages exist)
-	var nextCursor string
-	if len(messages) > 0 {
-		nextCursor = messages[len(messages)-1].SentAt.Format(time.RFC3339)
-	}
-
-	return messages, nextCursor, nil
-}
-
-func (r *PostgresMessageRepository) PinMessage(
-	ctx context.Context,
-	messageID uuid.UUID,
-	isPinned bool,
-) error {
-	query := `
-        UPDATE group_messages 
-        SET is_pinned = $1 
-        WHERE id = $2
-    `
-
-	_, err := r.db.ExecContext(ctx, query, isPinned, messageID)
-	return err
+	return messages, lastRowKey, nil
 }

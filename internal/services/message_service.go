@@ -6,7 +6,6 @@ import (
 
 	"Groupchat-Service/internal/database/repository"
 	"Groupchat-Service/internal/models"
-	fcmclient "Groupchat-Service/pkg"
 	"github.com/google/uuid"
 )
 
@@ -72,20 +71,19 @@ func (s *MessageService) sendPushNotifications(
 	tokens []string,
 	message *models.Message,
 ) {
-	notification := &fcmclient.Notification{
-		Title: message.SenderName,
-		Body:  message.Content,
-		Data: map[string]string{
-			"message_id": message.ID.String(),
-			"group_id":   message.GroupID.String(),
-		},
+	data := map[string]string{
+		"message_id": message.ID.String(),
+		"group_id":   message.GroupID.String(),
 	}
 
-	// Send to all tokens, handling potential failures
-	for _, token := range tokens {
-		// Could implement retry mechanism or batch sending
-		_ = s.notificationService.SendNotification(context.Background(), token, notification.Title, notification.Body, notification.Data)
-	}
+	// Use the NotificationService to send notifications
+	_ = s.notificationService.SendBatchNotifications(
+		context.Background(),
+		tokens,
+		message.SenderName, // Notification Title
+		message.Content,    // Notification Body
+		data,               // Additional Custom Data
+	)
 }
 
 func (s *MessageService) GetGroupMessages(

@@ -1,138 +1,126 @@
 package repository
 
 import (
-	"Groupchat-Service/internal/models"
 	"context"
-	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
+	"Groupchat-Service/internal/models"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	"github.com/google/uuid"
 )
 
-// FCMTokenRepository is an interface for operations related to FCM tokens.
-type FCMTokenRepository interface {
-	// CreateFCMToken inserts a new FCM token into the database.
-	CreateFCMToken(ctx context.Context, token *models.FCMToken) error
-
-	// GetFCMTokensByUser retrieves all active FCM tokens for a specific user.
-	GetFCMTokensByUser(ctx context.Context, userID uuid.UUID) ([]models.FCMToken, error)
-
-	// GetGroupMemberTokens retrieves active FCM tokens for all group members.
-	GetGroupMemberTokens(ctx context.Context, groupID uuid.UUID) ([]string, error)
-
-	// DeleteFCMToken deactivates a specific FCM token in the database.
-	DeleteFCMToken(ctx context.Context, tokenID uuid.UUID) error
+// AzureFCMTokenRepository implements FCMTokenRepository using Azure Table Storage
+type AzureFCMTokenRepository struct {
+	client *aztables.ServiceClient
+	table  *aztables.Client
 }
 
-// PostgresFCMTokenRepository is the Postgres implementation of the FCMTokenRepository.
-type PostgresFCMTokenRepository struct {
-	db *sql.DB
-}
+// NewAzureFCMTokenRepository creates a new FCM token repository
+func NewAzureFCMTokenRepository(client *aztables.ServiceClient) (*AzureFCMTokenRepository, error) {
+	table := client.NewClient(FCMTokensTable)
 
-// NewFCMTokenRepository creates a new instance of PostgresFCMTokenRepository.
-func NewFCMTokenRepository(db *sql.DB) *PostgresFCMTokenRepository {
-	return &PostgresFCMTokenRepository{
-		db: db,
-	}
-}
-
-// CreateFCMToken inserts a new FCM token into the database.
-func (r *PostgresFCMTokenRepository) CreateFCMToken(ctx context.Context, token *models.FCMToken) error {
-	query := `
-		INSERT INTO fcm_tokens (id, user_id, token, platform, device_name, created_at, last_used_at, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`
-	_, err := r.db.ExecContext(ctx, query,
-		token.ID,
-		token.UserID,
-		token.Token,
-		token.Platform,
-		token.DeviceName,
-		token.CreatedAt,
-		token.LastUsedAt,
-		token.IsActive,
-	)
-	return err
-}
-
-// GetFCMTokensByUser retrieves all active FCM tokens for a specific user.
-func (r *PostgresFCMTokenRepository) GetFCMTokensByUser(ctx context.Context, userID uuid.UUID) ([]models.FCMToken, error) {
-	query := `
-		SELECT id, user_id, token, platform, device_name, created_at, last_used_at, is_active
-		FROM fcm_tokens
-		WHERE user_id = $1 AND is_active = TRUE
-	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	_, err := table.CreateTable(context.Background(), nil)
 	if err != nil {
-		return nil, err
+		// Check if error is "TableAlreadyExists"
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.ErrorCode == "TableAlreadyExists" {
+			// Table exists, which is fine
+		} else {
+			return nil, fmt.Errorf("failed to create tokens table: %w", err)
+		}
 	}
-	defer rows.Close()
+
+	return &AzureFCMTokenRepository{
+		client: client,
+		table:  table,
+	}, nil
+}
+
+// FCMTokenEntity represents how we store FCM tokens in Azure Tables
+type FCMTokenEntity struct {
+	aztables.Entity           // Embedded Entity for PartitionKey and RowKey
+	UserID          string    `json:"UserID"`
+	Token           string    `json:"Token"`
+	Platform        string    `json:"Platform"`
+	DeviceName      string    `json:"DeviceName"`
+	CreatedAt       time.Time `json:"CreatedAt"`
+	LastUsedAt      time.Time `json:"LastUsedAt"`
+	IsActive        bool      `json:"IsActive"`
+}
+
+func (r *AzureFCMTokenRepository) CreateFCMToken(ctx context.Context, token *models.FCMToken) error {
+	// In Azure Tables, we'll use UserID as PartitionKey for efficient querying
+	// and TokenID as RowKey for uniqueness
+	entity := FCMTokenEntity{
+		Entity: aztables.Entity{
+			PartitionKey: token.UserID.String(),
+			RowKey:       token.ID.String(),
+		},
+		UserID:     token.UserID.String(),
+		Token:      token.Token,
+		Platform:   string(token.Platform),
+		DeviceName: token.DeviceName,
+		CreatedAt:  token.CreatedAt,
+		LastUsedAt: token.LastUsedAt,
+		IsActive:   token.IsActive,
+	}
+
+	marshalled, err := json.Marshal(entity)
+	if err != nil {
+		return fmt.Errorf("failed to marshal token entity: %w", err)
+	}
+
+	_, err = r.table.AddEntity(ctx, marshalled, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create token: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AzureFCMTokenRepository) GetFCMTokensByUser(ctx context.Context, userID uuid.UUID) ([]models.FCMToken, error) {
+	filter := fmt.Sprintf(
+		"PartitionKey eq '%s' and IsActive eq true",
+		userID.String(),
+	)
+
+	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
+		Filter: &filter,
+	})
 
 	var tokens []models.FCMToken
-	for rows.Next() {
-		var token models.FCMToken
-		err := rows.Scan(
-			&token.ID,
-			&token.UserID,
-			&token.Token,
-			&token.Platform,
-			&token.DeviceName,
-			&token.CreatedAt,
-			&token.LastUsedAt,
-			&token.IsActive,
-		)
+	for pager.More() {
+		response, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list tokens: %w", err)
 		}
-		tokens = append(tokens, token)
-	}
-	return tokens, nil
-}
 
-// GetGroupMemberTokens retrieves active FCM tokens for all group members by group ID.
-func (r *PostgresFCMTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID uuid.UUID) ([]string, error) {
-	query := `
-		SELECT DISTINCT t.token
-		FROM fcm_tokens t
-		INNER JOIN group_members gm ON t.user_id = gm.user_id
-		WHERE gm.group_id = $1 AND t.is_active = TRUE
-	`
-	rows, err := r.db.QueryContext(ctx, query, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+		for _, entity := range response.Entities {
+			var tokenEntity FCMTokenEntity
+			if err := json.Unmarshal(entity, &tokenEntity); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal token: %w", err)
+			}
 
-	var tokens []string
-	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			return nil, err
+			userID, _ := uuid.Parse(tokenEntity.UserID)
+			tokenID, _ := uuid.Parse(tokenEntity.Entity.RowKey)
+
+			token := models.FCMToken{
+				ID:         tokenID,
+				UserID:     userID,
+				Token:      tokenEntity.Token,
+				Platform:   models.Platform(tokenEntity.Platform),
+				DeviceName: tokenEntity.DeviceName,
+				CreatedAt:  tokenEntity.CreatedAt,
+				LastUsedAt: tokenEntity.LastUsedAt,
+				IsActive:   tokenEntity.IsActive,
+			}
+			tokens = append(tokens, token)
 		}
-		tokens = append(tokens, token)
 	}
+
 	return tokens, nil
-}
-
-// DeleteFCMToken deactivates a specific FCM token in the database by setting is_active to FALSE.
-func (r *PostgresFCMTokenRepository) DeleteFCMToken(ctx context.Context, tokenID uuid.UUID) error {
-	query := `
-		UPDATE fcm_tokens
-		SET is_active = FALSE
-		WHERE id = $1
-	`
-	result, err := r.db.ExecContext(ctx, query, tokenID)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("no rows affected, token ID might not exist")
-	}
-	return nil
 }

@@ -4,12 +4,11 @@ import (
 	"Groupchat-Service/internal/config"
 	"Groupchat-Service/internal/controllers"
 	"Groupchat-Service/internal/database/repository"
-	"Groupchat-Service/internal/middleware"
 	"Groupchat-Service/internal/services"
-	fcmclient "Groupchat-Service/pkg"
 	"context"
-	"database/sql"
+	firebase "firebase.google.com/go/v4"
 	"fmt"
+	"google.golang.org/api/option"
 	"log"
 	"net/http"
 	"os"
@@ -24,25 +23,23 @@ import (
 )
 
 func initializeServices(cfg *config.Config) (*services.NotificationService, error) {
-	// Create the FCM Client configuration
-	fcmConfig := &fcmclient.ClientConfig{
-		ServerKey:    cfg.FCM.ServerKey,
-		MaxRetries:   cfg.FCM.MaxRetries,
-		RetryBackoff: cfg.FCM.RetryBackoff,
-		HTTPClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		RequestsPerSec: 100,
-	}
+	// Use Firebase Admin SDK configuration with the server key
+	opt := option.WithCredentialsFile("path/to/serviceAccountKey.json") // JSON key file path
 
-	// Initialize the FCM client with the configuration
-	fcmClient, err := fcmclient.NewFCMClient(fcmConfig)
+	// Initialize Firebase App
+	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize FCM client: %w", err)
+		return nil, fmt.Errorf("failed to initialize Firebase App: %w", err)
 	}
 
-	// Create the NotificationService with the FCM client
-	notificationService := services.NewNotificationService(fcmClient)
+	// Get the messaging client
+	client, err := app.Messaging(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Firebase Messaging client: %w", err)
+	}
+
+	// Initialize Notification Service
+	notificationService := services.NewNotificationService(client)
 
 	return notificationService, nil
 }
@@ -52,19 +49,6 @@ func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	// Initialize database connection
-	db, err := sql.Open("postgres", "postgresql://postgres:your_password@localhost:5432/fcm_microservice?sslmode=disable")
-	if err != nil {
-		log.Fatal("Error connecting to database:", err)
-	}
-	defer db.Close()
-
-	// Test the database connection
-	err = db.Ping()
-	if err != nil {
-		log.Fatal("Error pinging database:", err)
 	}
 
 	// Initialize services
@@ -89,10 +73,6 @@ func main() {
 
 	// Create router and register routes
 	router := mux.NewRouter()
-
-	// Apply global middleware
-	router.Use(middleware.LoggingMiddleware)
-	router.Use(middleware.AuthMiddleware)
 
 	// Register controller routes
 	groupMessagesController.RegisterRoutes(router)
