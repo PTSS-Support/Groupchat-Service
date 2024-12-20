@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -13,6 +14,12 @@ type Config struct {
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 	JWTSecret      string   `mapstructure:"jwt_secret"`
 	FCMServerKey   string   `mapstructure:"fcm_server_key"`
+
+	FCM struct {
+		ServerKey    string        `mapstructure:"server_key"`
+		MaxRetries   int           `mapstructure:"max_retries"`
+		RetryBackoff time.Duration `mapstructure:"retry_backoff"`
+	} `mapstructure:"fcm"`
 }
 
 func LoadConfig() (*Config, error) {
