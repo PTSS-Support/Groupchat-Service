@@ -16,8 +16,3 @@
 
   #Logging
   log_level: "info"
-
-  fcm:
-      server_key: "your-fcm-server-key-here"
-      max_retries: 3
-      retry_backoff: 1s
