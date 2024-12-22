@@ -1,42 +1,72 @@
 package services
 
 import (
+	"bytes"
 	"context"
-	"firebase.google.com/go/v4/messaging"
+	"encoding/json"
+	"log"
+	"net/http"
 )
 
-// NotificationService handles all push notification operations
 type NotificationService struct {
-	client *messaging.Client
+	FCMServerKey string
 }
 
-// NewNotificationService creates a new instance of NotificationService with Firebase Messaging Client
-func NewNotificationService(client *messaging.Client) *NotificationService {
-	return &NotificationService{client: client}
+func NewNotificationService(fcmServerKey string) *NotificationService {
+	return &NotificationService{
+		FCMServerKey: fcmServerKey,
+	}
 }
 
-// SendNotification sends a push notification to a specific device
-func (s *NotificationService) SendNotification(ctx context.Context, token string, title, body string, data map[string]string) error {
-	message := &messaging.Message{
-		Token: token,
-		Notification: &messaging.Notification{
-			Title: title,
-			Body:  body,
+func (n *NotificationService) SendBatchNotifications(
+	ctx context.Context,
+	tokens []string,
+	title string,
+	body string,
+	data map[string]string,
+) {
+	if len(tokens) == 0 {
+		log.Println("No tokens provided for the notification")
+		return
+	}
+
+	message := map[string]interface{}{
+		"registration_ids": tokens,
+		"notification": map[string]string{
+			"title": title,
+			"body":  body,
 		},
-		Data: data,
+		"data": data,
 	}
-	// Send message
-	_, err := s.client.Send(ctx, message)
-	return err
+
+	n.sendNotification(ctx, message)
 }
 
-// SendBatchNotifications sends notifications to multiple devices
-func (s *NotificationService) SendBatchNotifications(ctx context.Context, tokens []string, title, body string, data map[string]string) []error {
-	var errors []error
-	for _, token := range tokens {
-		if err := s.SendNotification(ctx, token, title, body, data); err != nil {
-			errors = append(errors, err)
-		}
+func (n *NotificationService) sendNotification(ctx context.Context, message map[string]interface{}) {
+	body, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Failed to marshal notification body: %v\n", err)
+		return
 	}
-	return errors
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://fcm.googleapis.com/fcm/send", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to create notification request: %v\n", err)
+		return
+	}
+
+	req.Header.Set("Authorization", "key="+n.FCMServerKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to send notification: %v\n", err)
+		return
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to send notification, status: %d\n", resp.StatusCode)
+	}
 }
