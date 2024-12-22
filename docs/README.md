@@ -1,5 +1,6 @@
 # Groupchat-Service
-Groupchat service for PTSS Support, built with Go and FCM
+Groupchat service for PTSS Support, built with GO and FCM SDK and FCM Admin SDK.
+This service will use a Azure table storage database.
 
 ## Dependencies
 ### Required Dependency:
@@ -16,16 +17,20 @@ Groupchat service for PTSS Support, built with Go and FCM
    ```bash
    go mod tidy
    ```
-3. Create a configuration file:
-   In the root directory, create a `config.yaml` file with the following content as an example:
-   ```yaml
-   port: "8080"
-   database_url: "postgres://user:password@localhost:5432/mydb"
-   allowed_origins:
-     - "http://localhost:3000"
-     - "https://myapp.com"
-   jwt_secret: "my-secret-key"
-   fcm_server_key: "your-fcm-server-key"
+3. Configure environment variables:
+   Create a `.env` file in the root directory of the project using the provided `.env.example` file as a reference. Example:
+   ```plain text
+   # Firebase Configuration
+   FIREBASE_CREDENTIAL_FILE=./config/firebase-credentials-dev.json
+
+   # Azure Storage Configuration
+   AZURE_STORAGE_ACCOUNT=your_storage_account
+   AZURE_STORAGE_KEY=your_storage_key
+   AZURE_CONNECTION_STRING=your_connection_string
+
+   # Application Configuration
+   APP_ENV=development
+   APP_PORT=8080
    ```
 
 4. Run the application:

@@ -22,3 +22,7 @@ go.work
 
 # JetBrains IDE project files
 .idea/
+
+# Keys and credentials
+/secrets
+.env
