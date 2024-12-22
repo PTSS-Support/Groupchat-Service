@@ -2,53 +2,80 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"time"
-
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Port           string   `mapstructure:"port"`
-	DatabaseURL    string   `mapstructure:"database_url"`
-	AllowedOrigins []string `mapstructure:"allowed_origins"`
-	JWTSecret      string   `mapstructure:"jwt_secret"`
-	FCMServerKey   string   `mapstructure:"fcm_server_key"`
+	// Firebase Configuration
+	FirebaseCredentialFile string `mapstructure:"firebase_credential_file"`
 
-	FCM struct {
-		ServerKey    string        `mapstructure:"server_key"`
-		MaxRetries   int           `mapstructure:"max_retries"`
-		RetryBackoff time.Duration `mapstructure:"retry_backoff"`
-	} `mapstructure:"fcm"`
+	// Azure Storage Configuration
+	AzureStorageAccount   string `mapstructure:"azure_storage_account"`
+	AzureStorageKey       string `mapstructure:"azure_storage_key"`
+	AzureConnectionString string `mapstructure:"azure_connection_string"`
+
+	// Application Configuration
+	Environment string `mapstructure:"environment"`
+	Port        int    `mapstructure:"port"`
+	Debug       bool   `mapstructure:"debug"`
 }
 
-func LoadConfig() (*Config, error) {
-	// Set configuration file name and type
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-
-	// Add paths to look for the config file
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./configs")
-	viper.AddConfigPath("/etc/fcm-microservice")
+func LoadConfig(configPath string) (*Config, error) {
+	var config Config
+	
+	viper.AddConfigPath(configPath)
+	viper.SetConfigName(".env")
+	viper.SetConfigType("env")
 
 	// Read environment variables
 	viper.AutomaticEnv()
 
-	// Read configuration
+	// Bind environment variables to keys
+	viper.BindEnv("firebase_credential_file", "FIREBASE_CREDENTIAL_FILE")
+	viper.BindEnv("azure_storage_account", "AZURE_STORAGE_ACCOUNT")
+	viper.BindEnv("azure_storage_key", "AZURE_STORAGE_KEY")
+	viper.BindEnv("azure_connection_string", "AZURE_CONNECTION_STRING")
+	viper.BindEnv("environment", "APP_ENV")
+	viper.BindEnv("port", "APP_PORT")
+	viper.BindEnv("debug", "DEBUG")
+
+	// Set defaults
+	viper.SetDefault("environment", "development")
+	viper.SetDefault("port", 8080)
+	viper.SetDefault("debug", false)
+
+	fmt.Printf("Looking for config file in: %s\n", configPath)
+
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("error reading config file: %s", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			fmt.Println("Warning: Config file not found, using environment variables")
+		} else {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
 	}
 
-	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("unable to decode config: %s", err)
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
-	// Override with environment variables if set
-	if port := os.Getenv("PORT"); port != "" {
-		config.Port = port
+	// Validate required fields
+	if err := validateConfig(&config); err != nil {
+		return nil, err
 	}
 
 	return &config, nil
+}
+
+func validateConfig(config *Config) error {
+	fmt.Printf("FirebaseCredentialFile: %s\n", config.FirebaseCredentialFile)
+	if config.FirebaseCredentialFile == "" {
+		return fmt.Errorf("firebase_credential_file is required")
+	}
+	if config.AzureStorageAccount == "" {
+		return fmt.Errorf("azure_storage_account is required")
+	}
+	if config.AzureStorageKey == "" {
+		return fmt.Errorf("azure_storage_key is required")
+	}
+	return nil
 }
