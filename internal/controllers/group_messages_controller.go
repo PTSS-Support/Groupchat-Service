@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"Groupchat-Service/internal/database/repositories"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -29,7 +30,7 @@ func (c *GroupMessagesController) RegisterRoutes(router *mux.Router) {
 	// Group message endpoints
 	router.HandleFunc("/api/v1/groups/{groupId}/messages", c.GetGroupMessages).Methods("GET")
 	router.HandleFunc("/api/v1/groups/{groupId}/messages", c.CreateGroupMessage).Methods("POST")
-	router.HandleFunc("/api/v1/groups/{groupId}/messages/{messageId}/pin", c.ToggleMessagePin).Methods("PUT")
+	router.HandleFunc("/api/v1/groups/{groupId}/messages/{messageId}/pin", c.ToggleMessagePin).Methods("PUT") // TODO: add methods for this
 }
 
 // GetGroupMessages handles the GET request for retrieving group messages
@@ -37,42 +38,35 @@ func (c *GroupMessagesController) GetGroupMessages(w http.ResponseWriter, r *htt
 	vars := mux.Vars(r)
 	groupID, err := uuid.Parse(vars["groupId"])
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid group ID format")
+		respondWithError(w, http.StatusBadRequest, "Invalid group ID")
 		return
 	}
 
 	// Parse query parameters
 	query := r.URL.Query()
-	pageSize, _ := strconv.Atoi(query.Get("pageSize"))
-	if pageSize <= 0 {
-		pageSize = 20 // Default page size
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	if limit <= 0 {
+		limit = 20 // Default limit
 	}
 
 	cursor := query.Get("cursor")
 	direction := query.Get("direction")
 	search := query.Get("search")
 
-	// Get messages using the service
-	messages, nextCursor, err := c.messageService.GetGroupMessages(r.Context(), groupID, services.MessageQueryOptions{
-		PageSize:  pageSize,
+	opts := repositories.MessageQueryOptions{
+		Limit:     limit,
 		Cursor:    cursor,
 		Direction: direction,
 		Search:    search,
-	})
+	}
 
+	messages, nextCursor, err := c.messageService.GetGroupMessages(r.Context(), groupID, opts)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve messages")
 		return
 	}
 
-	// Prepare response or PaginatedMessagesResponse TODO: update models or this
-	response := models.PaginatedResponse{
-		Data: messages,
-		Pagination: models.PaginationInfo{
-			NextCursor: nextCursor,
-		},
-	}
-
+	response := models.NewPaginatedResponse(messages, nextCursor, "", len(messages) == limit)
 	respondWithJSON(w, http.StatusOK, response)
 }
 
