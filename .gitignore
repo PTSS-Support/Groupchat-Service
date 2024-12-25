@@ -19,6 +19,10 @@
 
 # Go workspace file
 go.work
+.env
+/.idea
+qodana.yaml
+/secrets
 
 # JetBrains IDE project files
 .idea/
