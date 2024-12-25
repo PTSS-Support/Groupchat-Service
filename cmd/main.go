@@ -4,6 +4,7 @@ import (
 	"Groupchat-Service/internal/config"
 	"Groupchat-Service/internal/controllers"
 	"Groupchat-Service/internal/database/repositories"
+	"Groupchat-Service/internal/middleware"
 	"Groupchat-Service/internal/services"
 	"context"
 	firebase "firebase.google.com/go/v4"
@@ -41,6 +42,9 @@ func main() {
 
 	// Set up router
 	router := gin.Default()
+
+	// Add Prometheus middleware BEFORE other middleware
+	router.Use(middleware.PrometheusMiddleware())
 
 	// Define routes
 	router.GET("/groups/:groupId/messages", messageController.GetMessages)
