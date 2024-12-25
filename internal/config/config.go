@@ -22,7 +22,7 @@ type Config struct {
 
 func LoadConfig(configPath string) (*Config, error) {
 	var config Config
-	
+
 	viper.AddConfigPath(configPath)
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
@@ -43,8 +43,6 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", 8080)
 	viper.SetDefault("debug", false)
-
-	fmt.Printf("Looking for config file in: %s\n", configPath)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -67,7 +65,6 @@ func LoadConfig(configPath string) (*Config, error) {
 }
 
 func validateConfig(config *Config) error {
-	fmt.Printf("FirebaseCredentialFile: %s\n", config.FirebaseCredentialFile)
 	if config.FirebaseCredentialFile == "" {
 		return fmt.Errorf("firebase_credential_file is required")
 	}
