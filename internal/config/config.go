@@ -10,8 +10,6 @@ type Config struct {
 	FirebaseCredentialFile string `mapstructure:"firebase_credential_file"`
 
 	// Azure Storage Configuration
-	AzureStorageAccount   string `mapstructure:"azure_storage_account"`
-	AzureStorageKey       string `mapstructure:"azure_storage_key"`
 	AzureConnectionString string `mapstructure:"azure_connection_string"`
 
 	// Application Configuration
@@ -32,8 +30,6 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Bind environment variables to keys
 	viper.BindEnv("firebase_credential_file", "FIREBASE_CREDENTIAL_FILE")
-	viper.BindEnv("azure_storage_account", "AZURE_STORAGE_ACCOUNT")
-	viper.BindEnv("azure_storage_key", "AZURE_STORAGE_KEY")
 	viper.BindEnv("azure_connection_string", "AZURE_CONNECTION_STRING")
 	viper.BindEnv("environment", "APP_ENV")
 	viper.BindEnv("port", "APP_PORT")
@@ -67,12 +63,6 @@ func LoadConfig(configPath string) (*Config, error) {
 func validateConfig(config *Config) error {
 	if config.FirebaseCredentialFile == "" {
 		return fmt.Errorf("firebase_credential_file is required")
-	}
-	if config.AzureStorageAccount == "" {
-		return fmt.Errorf("azure_storage_account is required")
-	}
-	if config.AzureStorageKey == "" {
-		return fmt.Errorf("azure_storage_key is required")
 	}
 	return nil
 }
