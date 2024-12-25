@@ -33,10 +33,21 @@ func main() {
 
 	// Initialize repositories
 	messageRepo, err := repositories.NewMessageRepository(tableClient)
+	if err != nil {
+		log.Fatalf("Failed to create message repository: %v", err)
+	}
+
 	fcmTokenRepo, err := repositories.NewFCMTokenRepository(tableClient)
+	if err != nil {
+		log.Fatalf("Failed to create FCM token repository: %v", err)
+	}
 
 	// Initialize services
 	notificationService, err := services.NewNotificationService(cfg.FirebaseCredentialFile)
+	if err != nil {
+		log.Fatalf("Failed to create notification service: %v", err)
+	}
+
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
 
 	// Initialize controllers
