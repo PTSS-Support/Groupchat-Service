@@ -8,7 +8,7 @@ import (
 	"context"
 	firebase "firebase.google.com/go/v4"
 	"fmt"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"google.golang.org/api/option"
 	"log"
@@ -40,12 +40,12 @@ func main() {
 	messageController := controllers.NewMessageController(messageService)
 
 	// Set up router
-	router := mux.NewRouter()
+	router := gin.Default()
 
 	// Define routes
-	router.HandleFunc("/groups/{groupId}/messages", messageController.GetMessages).Methods("GET")
-	router.HandleFunc("/groups/{groupId}/messages", messageController.CreateMessage).Methods("POST")
-	router.HandleFunc("/groups/{groupId}/messages/{messageId}/pin", messageController.ToggleMessagePin).Methods("PUT")
+	router.GET("/groups/:groupId/messages", messageController.GetMessages)
+	router.POST("/groups/:groupId/messages", messageController.CreateMessage)
+	router.PUT("/groups/:groupId/messages/:messageId/pin", messageController.ToggleMessagePin)
 
 	// Get the path to the serviceAccountKey.json file
 	serviceAccountPath := cfg.FirebaseCredentialFile

@@ -21,10 +21,10 @@ type MessageCreate struct {
 }
 
 type PaginationQuery struct {
-	Cursor    *string
-	PageSize  int
-	Direction string
-	Search    *string
+	Cursor    *string `json:"cursor,omitempty"`
+	PageSize  int     `json:"pageSize"`
+	Direction string  `json:"direction"`
+	Search    *string `json:"search,omitempty"`
 }
 
 type PaginatedResponse struct {

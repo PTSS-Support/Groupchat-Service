@@ -1,8 +1,7 @@
 package controllers
 
 import (
-	"encoding/json"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
 
@@ -24,11 +23,12 @@ func NewMessageController(messageService services.MessageService) *FCMMessageCon
 }
 
 // GetMessages handles GET /groups/messages
-func (c *FCMMessageController) GetMessages(w http.ResponseWriter, r *http.Request) {
-	// Extract group ID from context (set by auth middleware)
-	groupID, err := getGroupIDFromContext(r.Context())
+// GetMessages handles GET /groups/messages
+func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
+	// Extract group ID from URL
+	groupID, err := uuid.Parse(ctx.Param("groupId"))
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid group context")
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
 		return
 	}
 
@@ -38,39 +38,39 @@ func (c *FCMMessageController) GetMessages(w http.ResponseWriter, r *http.Reques
 		Direction: "next",
 	}
 
-	if size := r.URL.Query().Get("pageSize"); size != "" {
+	if size := ctx.Query("pageSize"); size != "" {
 		pageSize, err := strconv.Atoi(size)
 		if err != nil || pageSize < 1 || pageSize > 50 {
-			respondWithError(w, http.StatusBadRequest, "page size must be between 1 and 50")
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page size must be between 1 and 50"})
 			return
 		}
 		query.PageSize = pageSize
 	}
 
-	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+	if cursor := ctx.Query("cursor"); cursor != "" {
 		query.Cursor = &cursor
 	}
 
-	if direction := r.URL.Query().Get("direction"); direction != "" {
+	if direction := ctx.Query("direction"); direction != "" {
 		if direction != "next" && direction != "previous" {
-			respondWithError(w, http.StatusBadRequest, "direction must be 'next' or 'previous'")
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "direction must be 'next' or 'previous'"})
 			return
 		}
 		query.Direction = direction
 	}
 
-	if search := r.URL.Query().Get("search"); search != "" {
+	if search := ctx.Query("search"); search != "" {
 		if len(search) > 100 {
-			respondWithError(w, http.StatusBadRequest, "search term too long: maximum 100 characters")
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "search term too long: maximum 100 characters"})
 			return
 		}
 		query.Search = &search
 	}
 
 	// Get messages from service
-	messages, pagination, err := c.messageService.GetMessages(r.Context(), groupID, query)
+	messages, pagination, err := c.messageService.GetMessages(ctx, groupID, query)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error retrieving messages")
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving messages"})
 		return
 	}
 
@@ -80,73 +80,56 @@ func (c *FCMMessageController) GetMessages(w http.ResponseWriter, r *http.Reques
 		Pagination: *pagination,
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	ctx.JSON(http.StatusOK, response)
 }
 
 // CreateMessage handles POST /groups/messages
-func (c *FCMMessageController) CreateMessage(w http.ResponseWriter, r *http.Request) {
+func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
 	// Get user info from context
-	userID, userName, err := getUserFromContext(r.Context())
+	userID, userName, err := getUserFromContext(ctx.Request.Context())
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid user context")
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
 		return
 	}
 
-	groupID, err := getGroupIDFromContext(r.Context())
+	groupID, err := getGroupIDFromContext(ctx.Request.Context())
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid group context")
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid group context"})
 		return
 	}
 
 	// Parse request body
 	var createReq models.MessageCreate
-	if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body")
+	if err := ctx.ShouldBindJSON(&createReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	// Call service to create message
-	message, err := c.messageService.CreateMessage(r.Context(), groupID, userID, userName, createReq)
+	message, err := c.messageService.CreateMessage(ctx.Request.Context(), groupID, userID, userName, createReq)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error creating message")
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating message"})
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, message)
+	ctx.JSON(http.StatusCreated, message)
 }
 
 // ToggleMessagePin handles PUT /groups/messages/{messageId}/pin
-func (c *FCMMessageController) ToggleMessagePin(w http.ResponseWriter, r *http.Request) {
+func (c *FCMMessageController) ToggleMessagePin(ctx *gin.Context) {
 	// Extract message ID from URL
-	messageID, err := uuid.Parse(mux.Vars(r)["messageId"])
+	messageID, err := uuid.Parse(ctx.Param("messageId"))
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid message ID")
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid message ID"})
 		return
 	}
 
 	// Call service to toggle pin
-	message, err := c.messageService.ToggleMessagePin(r.Context(), messageID)
+	message, err := c.messageService.ToggleMessagePin(ctx.Request.Context(), messageID)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error toggling message pin")
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error toggling message pin"})
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, message)
-}
-
-// respondWithError sends a JSON error response
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
-}
-
-// respondWithJSON sends a JSON response
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, err := json.Marshal(payload)
-	if err != nil {
-		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
+	ctx.JSON(http.StatusOK, message)
 }
