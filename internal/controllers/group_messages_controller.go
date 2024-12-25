@@ -1,135 +1,151 @@
 package controllers
 
 import (
-	"Groupchat-Service/internal/database/repositories"
 	"encoding/json"
+	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 
 	"Groupchat-Service/internal/models"
 	"Groupchat-Service/internal/services"
 )
 
-// GroupMessagesController handles HTTP requests for group messages
-type GroupMessagesController struct {
-	messageService *services.MessageService
+// FCMMessageController handles HTTP requests for messages
+type FCMMessageController struct {
+	messageService services.MessageService
 }
 
-// NewGroupMessagesController creates a new instance of GroupMessagesController
-func NewGroupMessagesController(messageService *services.MessageService) *GroupMessagesController {
-	return &GroupMessagesController{
+func NewMessageController(messageService services.MessageService) *FCMMessageController {
+	return &FCMMessageController{
 		messageService: messageService,
 	}
 }
 
-// RegisterRoutes registers all routes for group messages
-func (c *GroupMessagesController) RegisterRoutes(router *mux.Router) {
-	// Group message endpoints
-	router.HandleFunc("/api/v1/groups/{groupId}/messages", c.GetGroupMessages).Methods("GET")
-	router.HandleFunc("/api/v1/groups/{groupId}/messages", c.CreateGroupMessage).Methods("POST")
-	router.HandleFunc("/api/v1/groups/{groupId}/messages/{messageId}/pin", c.ToggleMessagePin).Methods("PUT") // TODO: add methods for this
-}
-
-// GetGroupMessages handles the GET request for retrieving group messages
-func (c *GroupMessagesController) GetGroupMessages(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	groupID, err := uuid.Parse(vars["groupId"])
+// GetMessages handles GET /groups/messages
+func (c *FCMMessageController) GetMessages(w http.ResponseWriter, r *http.Request) {
+	// Extract group ID from context (set by auth middleware)
+	groupID, err := getGroupIDFromContext(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid group ID")
+		respondWithError(w, http.StatusUnauthorized, "Invalid group context")
 		return
 	}
 
-	// Parse query parameters
-	query := r.URL.Query()
-	limit, _ := strconv.Atoi(query.Get("limit"))
-	if limit <= 0 {
-		limit = 20 // Default limit
+	// Parse pagination query
+	query := models.PaginationQuery{
+		PageSize:  10, // Default page size
+		Direction: "next",
 	}
 
-	cursor := query.Get("cursor")
-	direction := query.Get("direction")
-	search := query.Get("search")
-
-	opts := repositories.MessageQueryOptions{
-		Limit:     limit,
-		Cursor:    cursor,
-		Direction: direction,
-		Search:    search,
+	if size := r.URL.Query().Get("pageSize"); size != "" {
+		pageSize, err := strconv.Atoi(size)
+		if err != nil || pageSize < 1 || pageSize > 50 {
+			respondWithError(w, http.StatusBadRequest, "page size must be between 1 and 50")
+			return
+		}
+		query.PageSize = pageSize
 	}
 
-	messages, nextCursor, err := c.messageService.GetGroupMessages(r.Context(), groupID, opts)
+	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+		query.Cursor = &cursor
+	}
+
+	if direction := r.URL.Query().Get("direction"); direction != "" {
+		if direction != "next" && direction != "previous" {
+			respondWithError(w, http.StatusBadRequest, "direction must be 'next' or 'previous'")
+			return
+		}
+		query.Direction = direction
+	}
+
+	if search := r.URL.Query().Get("search"); search != "" {
+		if len(search) > 100 {
+			respondWithError(w, http.StatusBadRequest, "search term too long: maximum 100 characters")
+			return
+		}
+		query.Search = &search
+	}
+
+	// Get messages from service
+	messages, pagination, err := c.messageService.GetMessages(r.Context(), groupID, query)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve messages")
+		respondWithError(w, http.StatusInternalServerError, "Error retrieving messages")
 		return
 	}
 
-	response := models.NewPaginatedResponse(messages, nextCursor, "", len(messages) == limit)
+	// Format response
+	response := models.PaginatedResponse{
+		Data:       messages,
+		Pagination: *pagination,
+	}
+
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-// CreateGroupMessage handles the POST request for creating a new message
-func (c *GroupMessagesController) CreateGroupMessage(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	groupID, err := uuid.Parse(vars["groupId"])
+// CreateMessage handles POST /groups/messages
+func (c *FCMMessageController) CreateMessage(w http.ResponseWriter, r *http.Request) {
+	// Get user info from context
+	userID, userName, err := getUserFromContext(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid group ID format")
+		respondWithError(w, http.StatusUnauthorized, "Invalid user context")
+		return
+	}
+
+	groupID, err := getGroupIDFromContext(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid group context")
 		return
 	}
 
 	// Parse request body
-	var messageCreate models.MessageCreate
-	if err := json.NewDecoder(r.Body).Decode(&messageCreate); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+	var createReq models.MessageCreate
+	if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Create message object
-	message := &models.Message{
-		GroupID:    groupID,
-		SenderID:   messageCreate.SenderID,
-		SenderName: messageCreate.SenderName,
-		Content:    messageCreate.Content,
-	}
-
-	// Use service to create message
-	err = c.messageService.SendGroupMessage(r.Context(), message)
+	// Call service to create message
+	message, err := c.messageService.CreateMessage(r.Context(), groupID, userID, userName, createReq)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to create message")
+		respondWithError(w, http.StatusInternalServerError, "Error creating message")
 		return
 	}
 
 	respondWithJSON(w, http.StatusCreated, message)
 }
 
-// ToggleMessagePin handles the PUT request for toggling a message's pin status
-func (c *GroupMessagesController) ToggleMessagePin(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	messageID, err := uuid.Parse(vars["messageId"])
+// ToggleMessagePin handles PUT /groups/messages/{messageId}/pin
+func (c *FCMMessageController) ToggleMessagePin(w http.ResponseWriter, r *http.Request) {
+	// Extract message ID from URL
+	messageID, err := uuid.Parse(mux.Vars(r)["messageId"])
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid message ID format")
+		respondWithError(w, http.StatusBadRequest, "Invalid message ID")
 		return
 	}
 
-	// Toggle pin status using service
+	// Call service to toggle pin
 	message, err := c.messageService.ToggleMessagePin(r.Context(), messageID)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to toggle message pin status")
+		respondWithError(w, http.StatusInternalServerError, "Error toggling message pin")
 		return
 	}
 
 	respondWithJSON(w, http.StatusOK, message)
 }
 
-// Helper functions for HTTP responses
+// respondWithError sends a JSON error response
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
+// respondWithJSON sends a JSON response
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := json.Marshal(payload)
+	response, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)

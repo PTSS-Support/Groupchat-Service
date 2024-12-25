@@ -1,5 +1,5 @@
 # Groupchat-Service
-Groupchat service for PTSS Support, built with GO and FCM SDK and FCM Admin SDK.
+Groupchat microservice for PTSS Support, built with GO and FCM SDK and FCM Admin SDK.
 This service will use a Azure table storage database.
 
 ## Dependencies

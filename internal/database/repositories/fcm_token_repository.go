@@ -9,21 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
-type FCMTokenRepository struct {
+type FcmTokenRepository struct {
 	table *aztables.Client
 }
 
-func NewFCMTokenRepository(client *aztables.ServiceClient) (*FCMTokenRepository, error) {
+func NewFCMTokenRepository(client *aztables.ServiceClient) (*FcmTokenRepository, error) {
 	table := client.NewClient(FCMTokensTable)
 	_, err := table.CreateTable(context.Background(), nil)
 	if err != nil && err.Error() != "TableAlreadyExists" {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 
-	return &FCMTokenRepository{table: table}, nil
+	return &FcmTokenRepository{table: table}, nil
 }
 
-func (r *FCMTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID uuid.UUID) ([]string, error) {
+func (r *FcmTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID uuid.UUID) ([]string, error) {
 	filter := fmt.Sprintf("PartitionKey eq '%s' and IsActive eq true", groupID.String())
 	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
 		Filter: &filter,
@@ -47,4 +47,31 @@ func (r *FCMTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID u
 	}
 
 	return tokens, nil
+}
+
+func (r *FcmTokenRepository) SaveToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, token string) error {
+	entity := models.FCMToken{
+		PartitionKey: groupID.String(),
+		RowKey:       userID.String(),
+		Token:        token,
+		IsActive:     true,
+	}
+
+	marshaled, err := json.Marshal(entity)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entity: %w", err)
+	}
+
+	_, err = r.table.AddEntity(ctx, marshaled, nil)
+	if err != nil {
+		return fmt.Errorf("failed to save token: %w", err)
+	}
+
+	return nil
+}
+
+func (r *FcmTokenRepository) DeleteToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error {
+	// TODO implement
+
+	return nil
 }

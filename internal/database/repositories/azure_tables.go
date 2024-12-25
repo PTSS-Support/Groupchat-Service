@@ -1,9 +1,8 @@
-package repository
+package repositories
 
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
-	"time"
 )
 
 // TableNames defines constant names for our Azure tables

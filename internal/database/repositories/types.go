@@ -1,4 +1,4 @@
-package repository
+package repositories
 
 // MessageQueryOptions defines the parameters for querying messages
 type MessageQueryOptions struct {
