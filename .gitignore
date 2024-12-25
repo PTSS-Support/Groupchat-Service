@@ -23,3 +23,6 @@ go.work
 /.idea
 qodana.yaml
 /secrets
+
+# JetBrains IDE project files
+.idea/
