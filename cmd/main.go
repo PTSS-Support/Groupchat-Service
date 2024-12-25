@@ -9,11 +9,13 @@ import (
 	"context"
 	firebase "firebase.google.com/go/v4"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"google.golang.org/api/option"
 	"log"
 	"net/http"
+	"time"
 )
 
 func main() {
@@ -43,6 +45,16 @@ func main() {
 	// Set up router
 	router := gin.Default()
 
+	// Add CORS middleware
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
 	// Add Prometheus middleware BEFORE other middleware
 	router.Use(middleware.PrometheusMiddleware())
 
@@ -50,6 +62,9 @@ func main() {
 	router.GET("/groups/:groupId/messages", messageController.GetMessages)
 	router.POST("/groups/:groupId/messages", messageController.CreateMessage)
 	router.PUT("/groups/:groupId/messages/:messageId/pin", messageController.ToggleMessagePin)
+
+	// Middleware
+	middleware.RegisterMetricsEndpoint(router)
 
 	// Get the path to the serviceAccountKey.json file
 	serviceAccountPath := cfg.FirebaseCredentialFile
