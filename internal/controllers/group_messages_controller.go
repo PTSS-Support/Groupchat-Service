@@ -11,6 +11,13 @@ import (
 	"Groupchat-Service/internal/services"
 )
 
+const (
+	DefaultPageSize = 10
+	MinPageSize     = 1
+	MaxPageSize     = 50
+	MaxSearchLength = 100
+)
+
 type FCMMessageController struct {
 	messageService services.MessageService
 }
@@ -22,22 +29,20 @@ func NewMessageController(messageService services.MessageService) *FCMMessageCon
 }
 
 func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
-	// Extract group ID from URL
 	groupID, err := uuid.Parse(ctx.Param("groupId"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
 		return
 	}
 
-	// Parse pagination query
 	query := models.PaginationQuery{
-		PageSize:  10, // Default page size
+		PageSize:  DefaultPageSize, // Default page size
 		Direction: models.Next,
 	}
 
 	if size := ctx.Query("pageSize"); size != "" {
 		pageSize, err := strconv.Atoi(size)
-		if err != nil || pageSize < 1 || pageSize > 50 {
+		if err != nil || pageSize < MinPageSize || pageSize > MaxPageSize {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page size must be between 1 and 50"})
 			return
 		}
@@ -57,21 +62,19 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 	}
 
 	if search := ctx.Query("search"); search != "" {
-		if len(search) > 100 {
+		if len(search) > MaxSearchLength {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "search term too long: maximum 100 characters"})
 			return
 		}
 		query.Search = &search
 	}
 
-	// Get messages from service
 	messages, pagination, err := c.messageService.GetMessages(ctx, groupID, query)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving messages"})
 		return
 	}
 
-	// Format response
 	response := models.PaginatedResponse{
 		Data:       messages,
 		Pagination: *pagination,
@@ -80,9 +83,7 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
-// CreateMessage handles POST /groups/messages
 func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
-	// Get user info from context
 	userID, userName, err := getUserFromContext(ctx.Request.Context())
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
@@ -95,14 +96,12 @@ func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
 		return
 	}
 
-	// Parse request body
 	var createReq models.MessageCreate
 	if err := ctx.ShouldBindJSON(&createReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Call service to create message
 	message, err := c.messageService.CreateMessage(ctx.Request.Context(), groupID, userID, userName, createReq)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating message"})
@@ -112,16 +111,13 @@ func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, message)
 }
 
-// ToggleMessagePin handles PUT /groups/messages/{messageId}/pin
 func (c *FCMMessageController) ToggleMessagePin(ctx *gin.Context) {
-	// Extract message ID from URL
 	messageID, err := uuid.Parse(ctx.Param("messageId"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid message ID"})
 		return
 	}
 
-	// Call service to toggle pin
 	message, err := c.messageService.ToggleMessagePin(ctx.Request.Context(), messageID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error toggling message pin"})
