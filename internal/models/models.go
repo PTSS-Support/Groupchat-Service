@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+type Direction string
+
+const (
+	Next     Direction = "next"
+	Previous Direction = "previous"
+)
+
 type Message struct {
 	ID         uuid.UUID `json:"id"`
 	GroupID    uuid.UUID `json:"groupId"`
@@ -21,10 +28,10 @@ type MessageCreate struct {
 }
 
 type PaginationQuery struct {
-	Cursor    *string `json:"cursor,omitempty"`
-	PageSize  int     `json:"pageSize"`
-	Direction string  `json:"direction"`
-	Search    *string `json:"search,omitempty"`
+	Cursor    *string   `json:"cursor,omitempty"`
+	PageSize  int       `json:"pageSize"`
+	Direction Direction `json:"direction"`
+	Search    *string   `json:"search,omitempty"`
 }
 
 type PaginatedResponse struct {

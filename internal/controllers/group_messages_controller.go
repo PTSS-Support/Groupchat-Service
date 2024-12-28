@@ -11,7 +11,6 @@ import (
 	"Groupchat-Service/internal/services"
 )
 
-// FCMMessageController handles HTTP requests for messages
 type FCMMessageController struct {
 	messageService services.MessageService
 }
@@ -22,8 +21,6 @@ func NewMessageController(messageService services.MessageService) *FCMMessageCon
 	}
 }
 
-// GetMessages handles GET /groups/messages
-// GetMessages handles GET /groups/messages
 func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 	// Extract group ID from URL
 	groupID, err := uuid.Parse(ctx.Param("groupId"))
@@ -35,7 +32,7 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 	// Parse pagination query
 	query := models.PaginationQuery{
 		PageSize:  10, // Default page size
-		Direction: "next",
+		Direction: models.Next,
 	}
 
 	if size := ctx.Query("pageSize"); size != "" {
@@ -56,7 +53,7 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "direction must be 'next' or 'previous'"})
 			return
 		}
-		query.Direction = direction
+		query.Direction = models.Direction(direction)
 	}
 
 	if search := ctx.Query("search"); search != "" {
