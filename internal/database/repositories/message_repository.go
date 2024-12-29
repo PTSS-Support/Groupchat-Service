@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	"strings"
 	"time"
 
 	"Groupchat-Service/internal/models"
@@ -28,10 +29,15 @@ type MessageEntity struct {
 
 func NewMessageRepository(client *aztables.ServiceClient) (MessageRepository, error) {
 	table := client.NewClient(MessagesTable)
+	
 	_, err := table.CreateTable(context.Background(), nil)
-	if err != nil && err.Error() != "TableAlreadyExists" {
-		return nil, fmt.Errorf("failed to create messages table: %w", err)
+	if err != nil {
+		if strings.Contains(err.Error(), "TableAlreadyExists") {
+			return &messageRepository{table: table}, nil
+		}
+		return nil, fmt.Errorf("failed to create/verify table: %w", err)
 	}
+
 	return &messageRepository{table: table}, nil
 }
 

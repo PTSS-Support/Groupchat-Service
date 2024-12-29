@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	"github.com/google/uuid"
+	"strings"
 )
 
 type FcmTokenRepository struct {
@@ -15,9 +16,13 @@ type FcmTokenRepository struct {
 
 func NewFCMTokenRepository(client *aztables.ServiceClient) (*FcmTokenRepository, error) {
 	table := client.NewClient(FCMTokensTable)
+
 	_, err := table.CreateTable(context.Background(), nil)
-	if err != nil && err.Error() != "TableAlreadyExists" {
-		return nil, fmt.Errorf("failed to create table: %w", err)
+	if err != nil {
+		if strings.Contains(err.Error(), "TableAlreadyExists") {
+			return &FcmTokenRepository{table: table}, nil
+		}
+		return nil, fmt.Errorf("failed to create/verify table: %w", err)
 	}
 
 	return &FcmTokenRepository{table: table}, nil
