@@ -75,3 +75,12 @@ func (v *validationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
 	}
 	return parsedGroupID, nil
 }
+
+func (v *validationService) ValidateUserID(userID string) (uuid.UUID, error) {
+	parsedUserID, err := uuid.Parse(userID)
+	if err != nil {
+		return uuid.Nil, errors.New("invalid user ID")
+	}
+
+	return parsedUserID, nil
+}

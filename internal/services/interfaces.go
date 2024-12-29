@@ -20,4 +20,10 @@ type ValidationService interface {
 	ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error)
 	ValidateUserContext(ctx context.Context) (uuid.UUID, string, error)
 	ValidateGroupID(groupID string) (uuid.UUID, error)
+	ValidateUserID(userID string) (uuid.UUID, error)
+}
+
+type FCMTokenService interface {
+	SaveToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, token string) error
+	DeleteToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error
 }

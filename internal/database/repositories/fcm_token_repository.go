@@ -76,7 +76,13 @@ func (r *FcmTokenRepository) SaveToken(ctx context.Context, groupID uuid.UUID, u
 }
 
 func (r *FcmTokenRepository) DeleteToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error {
-	// TODO implement
+	partitionKey := groupID.String()
+	rowKey := userID.String()
+
+	_, err := r.table.DeleteEntity(ctx, partitionKey, rowKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete token: %w", err)
+	}
 
 	return nil
 }

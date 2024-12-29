@@ -50,9 +50,11 @@ func main() {
 
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
 	validationService := services.NewValidationService()
+	fcmTokenService := services.NewFCMTokenService(fcmTokenRepo)
 
 	// Initialize controllers
 	messageController := controllers.NewMessageController(messageService, validationService)
+	fcmTokenController := controllers.NewFCMTokenController(fcmTokenService, validationService)
 
 	// Set up router
 	router := gin.Default()
@@ -71,6 +73,7 @@ func main() {
 	router.Use(middleware.PrometheusMiddleware())
 
 	messageController.RegisterRoutes(router)
+	fcmTokenController.RegisterRoutes(router)
 
 	middleware.RegisterMetricsEndpoint(router)
 
