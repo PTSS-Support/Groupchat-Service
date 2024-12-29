@@ -15,13 +15,13 @@ const (
 	MaxSearchLength = 100
 )
 
-type ValidationService struct{}
+type validationService struct{}
 
-func NewValidationService() *ValidationService {
-	return &ValidationService{}
+func NewValidationService() ValidationService {
+	return &validationService{}
 }
 
-func (v *ValidationService) ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error) {
+func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error) {
 	query := models.PaginationQuery{
 		PageSize:  DefaultPageSize,
 		Direction: models.Next,
@@ -56,7 +56,7 @@ func (v *ValidationService) ValidatePaginationQuery(ctx context.Context, queryPa
 	return query, nil
 }
 
-func (v *ValidationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
+func (v *validationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
 	parsedGroupID, err := uuid.Parse(groupID)
 	if err != nil {
 		return uuid.Nil, errors.New("invalid group ID")
@@ -64,7 +64,7 @@ func (v *ValidationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
 	return parsedGroupID, nil
 }
 
-func (v *ValidationService) ValidateUserContext(ctx context.Context) (uuid.UUID, string, error) {
+func (v *validationService) ValidateUserContext(ctx context.Context) (uuid.UUID, string, error) {
 	userID, ok := ctx.Value("userID").(uuid.UUID)
 	if !ok {
 		return uuid.Nil, "", errors.New("user ID not found in context")

@@ -12,10 +12,10 @@ import (
 
 type FCMMessageController struct {
 	messageService    services.MessageService
-	validationService *services.ValidationService
+	validationService services.ValidationService
 }
 
-func NewMessageController(messageService services.MessageService, validationService *services.ValidationService) *FCMMessageController {
+func NewMessageController(messageService services.MessageService, validationService services.ValidationService) *FCMMessageController {
 	return &FCMMessageController{
 		messageService:    messageService,
 		validationService: validationService,
