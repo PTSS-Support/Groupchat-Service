@@ -43,14 +43,14 @@ func main() {
 	}
 
 	// Initialize services
-	notificationService, err := services.NewNotificationService(cfg.FirebaseCredentialFile)
+	notificationService, err := services.NewNotificationService(cfg.FirebaseCredentialFile, messageRepo)
 	if err != nil {
 		log.Fatalf("Failed to create notification service: %v", err)
 	}
 
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
 	validationService := services.NewValidationService()
-	
+
 	// Initialize controllers
 	messageController := controllers.NewMessageController(messageService, validationService)
 

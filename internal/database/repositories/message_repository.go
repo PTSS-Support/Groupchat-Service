@@ -29,7 +29,7 @@ type MessageEntity struct {
 
 func NewMessageRepository(client *aztables.ServiceClient) (MessageRepository, error) {
 	table := client.NewClient(MessagesTable)
-	
+
 	_, err := table.CreateTable(context.Background(), nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "TableAlreadyExists") {
@@ -161,7 +161,6 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 		Top:    &pageSize,
 	}
 
-	// Add cursor-based filtering if cursor is provided
 	if query.Cursor != nil {
 		cursorMsg, err := r.GetMessageByID(ctx, uuid.MustParse(*query.Cursor))
 		if err != nil {
@@ -220,7 +219,6 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 		}
 	}
 
-	// Handle pagination response
 	pagination := &models.PaginationResponse{}
 	if len(messages) > 0 {
 		if len(messages) > query.PageSize {
@@ -241,4 +239,52 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 // ptr returns a pointer to the string
 func ptr(s string) *string {
 	return &s
+}
+
+func (r *messageRepository) CountUnreadMessages(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, lastReadTime time.Time) (int, error) {
+	filter := fmt.Sprintf("PartitionKey eq '%s' and SentAt gt '%s'", groupID.String(), lastReadTime.UTC().Format(time.RFC3339))
+	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
+		Filter: &filter,
+	})
+
+	unreadCount := 0
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list unread messages: %w", err)
+		}
+		unreadCount += len(page.Entities)
+	}
+
+	return unreadCount, nil
+}
+
+func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error) {
+	filter := fmt.Sprintf("PartitionKey eq '%s' and RowKey eq '%s'", groupID.String(), userID.String())
+	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
+		Filter: &filter,
+	})
+
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
+		}
+
+		for _, entity := range page.Entities {
+			var rawEntity map[string]interface{}
+			if err := json.Unmarshal(entity, &rawEntity); err != nil {
+				return time.Time{}, fmt.Errorf("failed to unmarshal entity: %w", err)
+			}
+
+			lastReadTime, err := time.Parse(time.RFC3339, rawEntity["LastReadTime"].(string))
+			if err != nil {
+				return time.Time{}, fmt.Errorf("failed to parse last read time: %w", err)
+			}
+
+			return lastReadTime, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("last read time not found")
 }

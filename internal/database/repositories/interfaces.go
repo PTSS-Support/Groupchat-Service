@@ -4,6 +4,7 @@ import (
 	"Groupchat-Service/internal/models"
 	"context"
 	"github.com/google/uuid"
+	"time"
 )
 
 type MessageRepository interface {
@@ -11,6 +12,8 @@ type MessageRepository interface {
 	CreateMessage(ctx context.Context, groupID uuid.UUID, message *models.Message) error
 	ToggleMessagePin(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
 	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
+	GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error)
+	CountUnreadMessages(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, lastReadTime time.Time) (int, error)
 }
 
 type FCMTokenRepository interface {
