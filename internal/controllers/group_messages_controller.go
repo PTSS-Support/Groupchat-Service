@@ -3,7 +3,6 @@ package controllers
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -11,20 +10,15 @@ import (
 	"Groupchat-Service/internal/services"
 )
 
-const (
-	DefaultPageSize = 10
-	MinPageSize     = 1
-	MaxPageSize     = 50
-	MaxSearchLength = 100
-)
-
 type FCMMessageController struct {
-	messageService services.MessageService
+	messageService    services.MessageService
+	validationService *services.ValidationService
 }
 
-func NewMessageController(messageService services.MessageService) *FCMMessageController {
+func NewMessageController(messageService services.MessageService, validationService *services.ValidationService) *FCMMessageController {
 	return &FCMMessageController{
-		messageService: messageService,
+		messageService:    messageService,
+		validationService: validationService,
 	}
 }
 
@@ -35,38 +29,17 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 		return
 	}
 
-	query := models.PaginationQuery{
-		PageSize:  DefaultPageSize, // Default page size
-		Direction: models.Next,
+	queryParams := map[string]string{
+		"pageSize":  ctx.Query("pageSize"),
+		"cursor":    ctx.Query("cursor"),
+		"direction": ctx.Query("direction"),
+		"search":    ctx.Query("search"),
 	}
 
-	if size := ctx.Query("pageSize"); size != "" {
-		pageSize, err := strconv.Atoi(size)
-		if err != nil || pageSize < MinPageSize || pageSize > MaxPageSize {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page size must be between 1 and 50"})
-			return
-		}
-		query.PageSize = pageSize
-	}
-
-	if cursor := ctx.Query("cursor"); cursor != "" {
-		query.Cursor = &cursor
-	}
-
-	if direction := ctx.Query("direction"); direction != "" {
-		if direction != "next" && direction != "previous" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "direction must be 'next' or 'previous'"})
-			return
-		}
-		query.Direction = models.Direction(direction)
-	}
-
-	if search := ctx.Query("search"); search != "" {
-		if len(search) > MaxSearchLength {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "search term too long: maximum 100 characters"})
-			return
-		}
-		query.Search = &search
+	query, err := c.validationService.ValidatePaginationQuery(ctx.Request.Context(), queryParams)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	messages, pagination, err := c.messageService.GetMessages(ctx, groupID, query)
@@ -84,15 +57,15 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 }
 
 func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
-	userID, userName, err := getUserFromContext(ctx.Request.Context())
+	userID, userName, err := c.validationService.ValidateUserContext(ctx.Request.Context())
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	groupID, err := getGroupIDFromContext(ctx.Request.Context())
+	groupID, err := c.validationService.ValidateGroupID(ctx.Param("groupId"))
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid group context"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

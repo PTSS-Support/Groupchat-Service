@@ -49,9 +49,10 @@ func main() {
 	}
 
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
-
+	validationService := services.NewValidationService()
+	
 	// Initialize controllers
-	messageController := controllers.NewMessageController(messageService)
+	messageController := controllers.NewMessageController(messageService, validationService)
 
 	// Set up router
 	router := gin.Default()
