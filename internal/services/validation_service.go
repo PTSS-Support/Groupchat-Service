@@ -56,14 +56,6 @@ func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryPa
 	return query, nil
 }
 
-func (v *validationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
-	parsedGroupID, err := uuid.Parse(groupID)
-	if err != nil {
-		return uuid.Nil, errors.New("invalid group ID")
-	}
-	return parsedGroupID, nil
-}
-
 func (v *validationService) ValidateUserContext(ctx context.Context) (uuid.UUID, string, error) {
 	userID, ok := ctx.Value("userID").(uuid.UUID)
 	if !ok {
@@ -74,4 +66,12 @@ func (v *validationService) ValidateUserContext(ctx context.Context) (uuid.UUID,
 		return uuid.Nil, "", errors.New("user name not found in context")
 	}
 	return userID, userName, nil
+}
+
+func (v *validationService) ValidateGroupID(groupID string) (uuid.UUID, error) {
+	parsedGroupID, err := uuid.Parse(groupID)
+	if err != nil {
+		return uuid.Nil, errors.New("invalid group ID")
+	}
+	return parsedGroupID, nil
 }
