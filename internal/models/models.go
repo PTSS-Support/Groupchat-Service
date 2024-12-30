@@ -1,8 +1,8 @@
 package models
 
 import (
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 )
 
@@ -47,9 +47,9 @@ type PaginationResponse struct {
 }
 
 type FCMToken struct {
-	PartitionKey string              `json:"PartitionKey"` // GroupID
-	RowKey       string              `json:"RowKey"`       // UserID
-	Token        string              `json:"Token"`
-	IsActive     bool                `json:"IsActive"`
-	Timestamp    timestamp.Timestamp `json:"Timestamp"`
+	PartitionKey string                 `json:"PartitionKey"` // GroupID
+	RowKey       string                 `json:"RowKey"`       // UserID
+	Token        string                 `json:"Token"`
+	IsActive     bool                   `json:"IsActive"`
+	Timestamp    *timestamppb.Timestamp `json:"Timestamp"`
 }

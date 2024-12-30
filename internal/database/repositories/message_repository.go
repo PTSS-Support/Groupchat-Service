@@ -161,8 +161,13 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 		Top:    &pageSize,
 	}
 
-	if query.Cursor != nil {
-		cursorMsg, err := r.GetMessageByID(ctx, uuid.MustParse(*query.Cursor))
+	if query.Cursor != nil && *query.Cursor != "" {
+		cursorUUID, err := uuid.Parse(*query.Cursor)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid cursor format: %w", err)
+		}
+
+		cursorMsg, err := r.GetMessageByID(ctx, cursorUUID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid cursor: %w", err)
 		}
@@ -286,5 +291,6 @@ func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UU
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("last read time not found")
+	// Return Unix epoch time if last read time is not found
+	return time.Unix(0, 0), nil
 }

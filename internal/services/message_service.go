@@ -31,7 +31,7 @@ func NewMessageService(
 func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
 	messages, pagination, err := s.messageRepo.GetMessages(ctx, groupID, query)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting messages: %v", err)
+		return nil, nil, fmt.Errorf("error getting messages from repository: %w", err)
 	}
 	return messages, pagination, nil
 }

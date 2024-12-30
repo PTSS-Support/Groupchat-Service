@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"strings"
+	"time"
 )
 
 type FcmTokenRepository struct {
@@ -43,10 +45,31 @@ func (r *FcmTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID u
 		}
 
 		for _, entity := range page.Entities {
-			var tokenEntity models.FCMToken
-			if err := json.Unmarshal(entity, &tokenEntity); err != nil {
+			var temp struct {
+				PartitionKey string `json:"PartitionKey"`
+				RowKey       string `json:"RowKey"`
+				Token        string `json:"Token"`
+				IsActive     bool   `json:"IsActive"`
+				Timestamp    string `json:"Timestamp"`
+			}
+			if err := json.Unmarshal(entity, &temp); err != nil {
 				return nil, err
 			}
+
+			// Convert string timestamp to timestamppb.Timestamp
+			timestamp, err := time.Parse(time.RFC3339, temp.Timestamp)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+			}
+
+			tokenEntity := models.FCMToken{
+				PartitionKey: temp.PartitionKey,
+				RowKey:       temp.RowKey,
+				Token:        temp.Token,
+				IsActive:     temp.IsActive,
+				Timestamp:    timestamppb.New(timestamp),
+			}
+
 			tokens = append(tokens, tokenEntity.Token)
 		}
 	}
@@ -60,6 +83,7 @@ func (r *FcmTokenRepository) SaveToken(ctx context.Context, groupID uuid.UUID, u
 		RowKey:       userID.String(),
 		Token:        token,
 		IsActive:     true,
+		Timestamp:    timestamppb.New(time.Now().UTC()),
 	}
 
 	marshaled, err := json.Marshal(entity)
