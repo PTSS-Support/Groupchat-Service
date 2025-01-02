@@ -85,7 +85,7 @@ func (s *FCMNotificationService) SendGroupMessage(message Message, deviceTokens 
 			return response, fmt.Errorf("error getting last read time: %v", err)
 		}
 
-		badgeNumber, err := s.messageRepo.CountUnreadMessages(s.ctx, uuid.MustParse(message.GroupID), uuid.MustParse(message.SenderID), lastReadTime)
+		badgeNumber, err := s.messageRepo.CountUnreadMessages(s.ctx, uuid.MustParse(message.GroupID), lastReadTime)
 		if err != nil {
 			return response, fmt.Errorf("error counting unread messages: %v", err)
 		}

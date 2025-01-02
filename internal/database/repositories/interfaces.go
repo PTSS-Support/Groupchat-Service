@@ -13,7 +13,7 @@ type MessageRepository interface {
 	ToggleMessagePin(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error)
 	GetMessageByID(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error)
 	GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error)
-	CountUnreadMessages(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, lastReadTime time.Time) (int, error)
+	CountUnreadMessages(ctx context.Context, groupID uuid.UUID, lastReadTime time.Time) (int, error)
 }
 
 type FCMTokenRepository interface {

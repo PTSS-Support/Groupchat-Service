@@ -90,7 +90,7 @@ func (r *messageRepository) ToggleMessagePin(ctx context.Context, groupID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("failed to update message: %w", err)
 	}
-	
+
 	message.IsPinned = !message.IsPinned
 	return message, nil
 }
@@ -229,13 +229,16 @@ func ptr(s string) *string {
 	return &s
 }
 
-func (r *messageRepository) CountUnreadMessages(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, lastReadTime time.Time) (int, error) {
+func (r *messageRepository) CountUnreadMessages(ctx context.Context, groupID uuid.UUID, lastReadTime time.Time) (int, error) {
 	filter := fmt.Sprintf("PartitionKey eq '%s' and SentAt gt '%s'", groupID.String(), lastReadTime.UTC().Format(time.RFC3339))
-	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
+	selectFields := "PartitionKey"
+	options := &aztables.ListEntitiesOptions{
 		Filter: &filter,
-	})
+		Select: &selectFields,
+	}
 
 	unreadCount := 0
+	pager := r.table.NewListEntitiesPager(options)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -248,32 +251,23 @@ func (r *messageRepository) CountUnreadMessages(ctx context.Context, groupID uui
 }
 
 func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error) {
-	filter := fmt.Sprintf("PartitionKey eq '%s' and RowKey eq '%s'", groupID.String(), userID.String())
-	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
-		Filter: &filter,
-	})
+	partitionKey := groupID.String()
+	rowKey := userID.String()
 
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
-		}
-
-		for _, entity := range page.Entities {
-			var rawEntity map[string]interface{}
-			if err := json.Unmarshal(entity, &rawEntity); err != nil {
-				return time.Time{}, fmt.Errorf("failed to unmarshal entity: %w", err)
-			}
-
-			lastReadTime, err := time.Parse(time.RFC3339, rawEntity["LastReadTime"].(string))
-			if err != nil {
-				return time.Time{}, fmt.Errorf("failed to parse last read time: %w", err)
-			}
-
-			return lastReadTime, nil
-		}
+	entity, err := r.table.GetEntity(ctx, partitionKey, rowKey, nil)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
 	}
 
-	// Return Unix epoch time if last read time is not found
-	return time.Unix(0, 0), nil
+	var rawEntity map[string]interface{}
+	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
+		return time.Time{}, fmt.Errorf("failed to unmarshal entity: %w", err)
+	}
+
+	lastReadTime, err := time.Parse(time.RFC3339, rawEntity["LastReadTime"].(string))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse last read time: %w", err)
+	}
+
+	return lastReadTime, nil
 }
