@@ -65,11 +65,10 @@ func (r *messageRepository) CreateMessage(ctx context.Context, groupID uuid.UUID
 	return nil
 }
 
-func (r *messageRepository) ToggleMessagePin(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
-	// First get the message to get its current state and partition key
-	message, err := r.GetMessageByID(ctx, messageID)
+func (r *messageRepository) ToggleMessagePin(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
+	message, err := r.GetMessageByID(ctx, groupID, messageID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting message by ID: %v", err)
 	}
 
 	entity := MessageEntity{
@@ -91,60 +90,44 @@ func (r *messageRepository) ToggleMessagePin(ctx context.Context, messageID uuid
 	if err != nil {
 		return nil, fmt.Errorf("failed to update message: %w", err)
 	}
-
-	// Update the message object with new pin status
+	
 	message.IsPinned = !message.IsPinned
 	return message, nil
 }
 
-func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
-	filter := fmt.Sprintf("RowKey eq '%s'", messageID.String())
+func (r *messageRepository) GetMessageByID(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
+	partitionKey := groupID.String()
+	rowKey := messageID.String()
 
-	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
-		Filter: &filter,
-	})
-
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get message: %w", err)
-		}
-
-		// Should only be one result
-		for _, entity := range page.Entities {
-			var rawEntity map[string]interface{}
-			if err := json.Unmarshal(entity, &rawEntity); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
-			}
-
-			sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse sent time: %w", err)
-			}
-
-			senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse sender ID: %w", err)
-			}
-
-			groupID, err := uuid.Parse(rawEntity["PartitionKey"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse group ID: %w", err)
-			}
-
-			return &models.Message{
-				ID:         messageID,
-				GroupID:    groupID,
-				SenderID:   senderID,
-				SenderName: rawEntity["SenderName"].(string),
-				Content:    rawEntity["Content"].(string),
-				SentAt:     sentAt,
-				IsPinned:   rawEntity["IsPinned"].(bool),
-			}, nil
-		}
+	entity, err := r.table.GetEntity(ctx, partitionKey, rowKey, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 
-	return nil, fmt.Errorf("message not found")
+	var rawEntity map[string]interface{}
+	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
+	}
+
+	sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sent time: %w", err)
+	}
+
+	senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sender ID: %w", err)
+	}
+
+	return &models.Message{
+		ID:         messageID,
+		GroupID:    groupID,
+		SenderID:   senderID,
+		SenderName: rawEntity["SenderName"].(string),
+		Content:    rawEntity["Content"].(string),
+		SentAt:     sentAt,
+		IsPinned:   rawEntity["IsPinned"].(bool),
+	}, nil
 }
 
 func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
@@ -167,7 +150,7 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 			return nil, nil, fmt.Errorf("invalid cursor format: %w", err)
 		}
 
-		cursorMsg, err := r.GetMessageByID(ctx, cursorUUID)
+		cursorMsg, err := r.GetMessageByID(ctx, groupID, cursorUUID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid cursor: %w", err)
 		}

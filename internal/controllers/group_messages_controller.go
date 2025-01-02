@@ -97,7 +97,13 @@ func (c *FCMMessageController) ToggleMessagePin(ctx *gin.Context) {
 		return
 	}
 
-	message, err := c.messageService.ToggleMessagePin(ctx.Request.Context(), messageID)
+	groupID, err := uuid.Parse(ctx.Param("groupId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
+		return
+	}
+
+	message, err := c.messageService.ToggleMessagePin(ctx.Request.Context(), groupID, messageID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error toggling message pin"})
 		return

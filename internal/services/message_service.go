@@ -78,17 +78,17 @@ func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, u
 	return message, nil
 }
 
-func (s *messageService) ToggleMessagePin(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
-	message, err := s.messageRepo.GetMessageByID(ctx, messageID)
+func (s *messageService) ToggleMessagePin(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
+	message, err := s.messageRepo.GetMessageByID(ctx, groupID, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting message: %v", err)
 	}
 
 	message.IsPinned = !message.IsPinned
-	message, err = s.messageRepo.ToggleMessagePin(ctx, messageID)
+	updatedMessage, err := s.messageRepo.ToggleMessagePin(ctx, groupID, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("error updating message pin status: %v", err)
 	}
 
-	return message, nil
+	return updatedMessage, nil
 }
