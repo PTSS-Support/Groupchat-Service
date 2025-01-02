@@ -98,53 +98,40 @@ func (r *messageRepository) ToggleMessagePin(ctx context.Context, messageID uuid
 }
 
 func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
-	filter := fmt.Sprintf("RowKey eq '%s'", messageID.String())
-
-	pager := r.table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
-		Filter: &filter,
-	})
-
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get message: %w", err)
-		}
-
-		// Should only be one result
-		for _, entity := range page.Entities {
-			var rawEntity map[string]interface{}
-			if err := json.Unmarshal(entity, &rawEntity); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
-			}
-
-			sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse sent time: %w", err)
-			}
-
-			senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse sender ID: %w", err)
-			}
-
-			groupID, err := uuid.Parse(rawEntity["PartitionKey"].(string))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse group ID: %w", err)
-			}
-
-			return &models.Message{
-				ID:         messageID,
-				GroupID:    groupID,
-				SenderID:   senderID,
-				SenderName: rawEntity["SenderName"].(string),
-				Content:    rawEntity["Content"].(string),
-				SentAt:     sentAt,
-				IsPinned:   rawEntity["IsPinned"].(bool),
-			}, nil
-		}
+	entity, err := r.table.GetEntity(ctx, "", messageID.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 
-	return nil, fmt.Errorf("message not found")
+	var rawEntity map[string]interface{}
+	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
+	}
+
+	sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sent time: %w", err)
+	}
+
+	senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sender ID: %w", err)
+	}
+
+	groupID, err := uuid.Parse(rawEntity["PartitionKey"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse group ID: %w", err)
+	}
+
+	return &models.Message{
+		ID:         messageID,
+		GroupID:    groupID,
+		SenderID:   senderID,
+		SenderName: rawEntity["SenderName"].(string),
+		Content:    rawEntity["Content"].(string),
+		SentAt:     sentAt,
+		IsPinned:   rawEntity["IsPinned"].(bool),
+	}, nil
 }
 
 func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
