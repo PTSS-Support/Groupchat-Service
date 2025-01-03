@@ -16,7 +16,6 @@ type messageRepository struct {
 	table *aztables.Client
 }
 
-// MessageEntity represents the structure for Azure Table Storage
 type MessageEntity struct {
 	PartitionKey string `json:"PartitionKey"`
 	RowKey       string `json:"RowKey"`
@@ -114,6 +113,20 @@ func (t *tableOperations) updateEntity(ctx context.Context, entity interface{}) 
 	return nil
 }
 
+func (t *tableOperations) getAndUnmarshalEntity(ctx context.Context, partitionKey, rowKey string) (map[string]interface{}, error) {
+	entity, err := t.table.GetEntity(ctx, partitionKey, rowKey, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get entity: %w", err)
+	}
+
+	var rawEntity map[string]interface{}
+	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
+	}
+
+	return rawEntity, nil
+}
+
 // queryBuilder handles building Azure Table queries
 type queryBuilder struct{}
 
@@ -187,14 +200,10 @@ func (r *messageRepository) ToggleMessagePin(ctx context.Context, groupID uuid.U
 }
 
 func (r *messageRepository) GetMessageByID(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
-	entity, err := r.table.GetEntity(ctx, groupID.String(), messageID.String(), nil)
+	ops := &tableOperations{table: r.table}
+	rawEntity, err := ops.getAndUnmarshalEntity(ctx, groupID.String(), messageID.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message: %w", err)
-	}
-
-	var rawEntity map[string]interface{}
-	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
 	}
 
 	mapper := &entityMapper{}
@@ -332,18 +341,13 @@ func (r *messageRepository) countFilteredEntities(ctx context.Context, options *
 }
 
 func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error) {
-	entity, err := r.table.GetEntity(ctx, groupID.String(), userID.String(), nil)
+	ops := &tableOperations{table: r.table}
+	rawEntity, err := ops.getAndUnmarshalEntity(ctx, groupID.String(), userID.String())
 	if err != nil {
 		if strings.Contains(err.Error(), "ResourceNotFound") {
-			// Return the current time if the entity does not exist
 			return time.Now().UTC(), nil
 		}
 		return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
-	}
-
-	var rawEntity map[string]interface{}
-	if err := json.Unmarshal(entity.Value, &rawEntity); err != nil {
-		return time.Time{}, fmt.Errorf("failed to unmarshal entity: %w", err)
 	}
 
 	mapper := &entityMapper{}
