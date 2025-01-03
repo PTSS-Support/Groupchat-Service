@@ -7,12 +7,12 @@ import (
 )
 
 type fcmTokenController struct {
-	service           services.FCMTokenService
+	fcmTokenService   services.FCMTokenService
 	validationService services.ValidationService
 }
 
 func NewFCMTokenController(service services.FCMTokenService, validationService services.ValidationService) FCMTokenController {
-	return &fcmTokenController{service: service, validationService: validationService}
+	return &fcmTokenController{fcmTokenService: service, validationService: validationService}
 }
 
 func (c *fcmTokenController) RegisterRoutes(router *gin.Engine) {
@@ -42,7 +42,7 @@ func (c *fcmTokenController) SaveToken(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.service.SaveToken(ctx.Request.Context(), groupID, userID, request.Token); err != nil {
+	if err := c.fcmTokenService.SaveToken(ctx.Request.Context(), groupID, userID, request.Token); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save token"})
 		return
 	}
@@ -63,7 +63,7 @@ func (c *fcmTokenController) DeleteToken(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.service.DeleteToken(ctx.Request.Context(), groupID, userID); err != nil {
+	if err := c.fcmTokenService.DeleteToken(ctx.Request.Context(), groupID, userID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete token"})
 		return
 	}
