@@ -27,6 +27,124 @@ type MessageEntity struct {
 	IsPinned     bool   `json:"IsPinned"`
 }
 
+// LastReadEntity represents the structure for storing last read times
+type LastReadEntity struct {
+	PartitionKey string `json:"PartitionKey"` // GroupID
+	RowKey       string `json:"RowKey"`       // UserID
+	LastReadTime string `json:"LastReadTime"`
+}
+
+// entityMapper handles conversion between Message and MessageEntity
+type entityMapper struct{}
+
+func (m *entityMapper) toEntity(groupID uuid.UUID, message *models.Message) MessageEntity {
+	return MessageEntity{
+		PartitionKey: groupID.String(),
+		RowKey:       message.ID.String(),
+		SenderID:     message.SenderID.String(),
+		SenderName:   message.SenderName,
+		Content:      message.Content,
+		SentAt:       message.SentAt.UTC().Format(time.RFC3339),
+		IsPinned:     message.IsPinned,
+	}
+}
+
+func (m *entityMapper) toMessage(rawEntity map[string]interface{}) (*models.Message, error) {
+	messageID, err := uuid.Parse(rawEntity["RowKey"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse message ID: %w", err)
+	}
+
+	groupID, err := uuid.Parse(rawEntity["PartitionKey"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse group ID: %w", err)
+	}
+
+	senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sender ID: %w", err)
+	}
+
+	sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse sent time: %w", err)
+	}
+
+	return &models.Message{
+		ID:         messageID,
+		GroupID:    groupID,
+		SenderID:   senderID,
+		SenderName: rawEntity["SenderName"].(string),
+		Content:    rawEntity["Content"].(string),
+		SentAt:     sentAt,
+		IsPinned:   rawEntity["IsPinned"].(bool),
+	}, nil
+}
+
+// tableOperations handles common Azure Table operations
+type tableOperations struct {
+	table *aztables.Client
+}
+
+func (t *tableOperations) addEntity(ctx context.Context, entity interface{}) error {
+	marshaled, err := json.Marshal(entity)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entity: %w", err)
+	}
+
+	_, err = t.table.AddEntity(ctx, marshaled, nil)
+	if err != nil {
+		return fmt.Errorf("failed to add entity: %w", err)
+	}
+
+	return nil
+}
+
+func (t *tableOperations) updateEntity(ctx context.Context, entity interface{}) error {
+	marshaled, err := json.Marshal(entity)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entity: %w", err)
+	}
+
+	_, err = t.table.UpdateEntity(ctx, marshaled, nil)
+	if err != nil {
+		return fmt.Errorf("failed to update entity: %w", err)
+	}
+
+	return nil
+}
+
+// queryBuilder handles building Azure Table queries
+type queryBuilder struct{}
+
+func (q *queryBuilder) buildMessageFilter(groupID uuid.UUID, query *models.PaginationQuery, cursorTime *time.Time) string {
+	filter := fmt.Sprintf("PartitionKey eq '%s'", groupID.String())
+
+	if cursorTime != nil {
+		if query.Direction == "previous" {
+			filter += fmt.Sprintf(" and SentAt gt '%s'", cursorTime.UTC().Format("2006-01-02T15:04:05Z"))
+		} else {
+			filter += fmt.Sprintf(" and SentAt lt '%s'", cursorTime.UTC().Format("2006-01-02T15:04:05Z"))
+		}
+	}
+
+	return filter
+}
+
+func (q *queryBuilder) buildUnreadMessagesFilter(groupID uuid.UUID, lastReadTime time.Time) string {
+	return fmt.Sprintf("PartitionKey eq '%s' and SentAt gt '%s'",
+		groupID.String(),
+		lastReadTime.UTC().Format(time.RFC3339))
+}
+
+func (m *entityMapper) parseLastReadTime(rawEntity map[string]interface{}) (time.Time, error) {
+	lastReadTime, err := time.Parse(time.RFC3339, rawEntity["LastReadTime"].(string))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse last read time: %w", err)
+	}
+	return lastReadTime, nil
+}
+
 func NewMessageRepository(client *aztables.ServiceClient) (MessageRepository, error) {
 	table := client.NewClient(MessagesTable)
 
@@ -42,27 +160,11 @@ func NewMessageRepository(client *aztables.ServiceClient) (MessageRepository, er
 }
 
 func (r *messageRepository) CreateMessage(ctx context.Context, groupID uuid.UUID, message *models.Message) error {
-	entity := MessageEntity{
-		PartitionKey: groupID.String(),
-		RowKey:       message.ID.String(),
-		SenderID:     message.SenderID.String(),
-		SenderName:   message.SenderName,
-		Content:      message.Content,
-		SentAt:       message.SentAt.UTC().Format(time.RFC3339),
-		IsPinned:     message.IsPinned,
-	}
+	mapper := &entityMapper{}
+	ops := &tableOperations{table: r.table}
 
-	marshaled, err := json.Marshal(entity)
-	if err != nil {
-		return fmt.Errorf("failed to marshal entity: %w", err)
-	}
-
-	_, err = r.table.AddEntity(ctx, marshaled, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
-	}
-
-	return nil
+	entity := mapper.toEntity(groupID, message)
+	return ops.addEntity(ctx, entity)
 }
 
 func (r *messageRepository) ToggleMessagePin(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
@@ -71,35 +173,21 @@ func (r *messageRepository) ToggleMessagePin(ctx context.Context, groupID uuid.U
 		return nil, fmt.Errorf("error getting message by ID: %v", err)
 	}
 
-	entity := MessageEntity{
-		PartitionKey: message.GroupID.String(),
-		RowKey:       messageID.String(),
-		SenderID:     message.SenderID.String(),
-		SenderName:   message.SenderName,
-		Content:      message.Content,
-		SentAt:       message.SentAt.UTC().Format(time.RFC3339),
-		IsPinned:     !message.IsPinned,
-	}
-
-	marshaled, err := json.Marshal(entity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal entity: %w", err)
-	}
-
-	_, err = r.table.UpdateEntity(ctx, marshaled, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update message: %w", err)
-	}
-
 	message.IsPinned = !message.IsPinned
+
+	mapper := &entityMapper{}
+	ops := &tableOperations{table: r.table}
+
+	entity := mapper.toEntity(groupID, message)
+	if err := ops.updateEntity(ctx, entity); err != nil {
+		return nil, err
+	}
+
 	return message, nil
 }
 
 func (r *messageRepository) GetMessageByID(ctx context.Context, groupID uuid.UUID, messageID uuid.UUID) (*models.Message, error) {
-	partitionKey := groupID.String()
-	rowKey := messageID.String()
-
-	entity, err := r.table.GetEntity(ctx, partitionKey, rowKey, nil)
+	entity, err := r.table.GetEntity(ctx, groupID.String(), messageID.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
@@ -109,31 +197,12 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, groupID uuid.UUI
 		return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
 	}
 
-	sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse sent time: %w", err)
-	}
-
-	senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse sender ID: %w", err)
-	}
-
-	return &models.Message{
-		ID:         messageID,
-		GroupID:    groupID,
-		SenderID:   senderID,
-		SenderName: rawEntity["SenderName"].(string),
-		Content:    rawEntity["Content"].(string),
-		SentAt:     sentAt,
-		IsPinned:   rawEntity["IsPinned"].(bool),
-	}, nil
+	mapper := &entityMapper{}
+	return mapper.toMessage(rawEntity)
 }
 
 func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
-	// Filter messages by group ID
-	filter := fmt.Sprintf("PartitionKey eq '%s'", groupID.String())
-
+	var cursorTime *time.Time
 	if query.Cursor != nil && *query.Cursor != "" {
 		cursorUUID, err := uuid.Parse(*query.Cursor)
 		if err != nil {
@@ -144,84 +213,79 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid cursor: %w", err)
 		}
-
-		// Azure Tables expects ISO8601 format directly
-		cursorTime := cursorMsg.SentAt.UTC().Format("2006-01-02T15:04:05Z")
-		if query.Direction == "previous" {
-			filter += fmt.Sprintf(" and SentAt gt '%s'", cursorTime)
-		} else {
-			filter += fmt.Sprintf(" and SentAt lt '%s'", cursorTime)
-		}
+		t := cursorMsg.SentAt
+		cursorTime = &t
 	}
 
-	pageSize := int32(query.PageSize)
+	qb := &queryBuilder{}
+	filter := qb.buildMessageFilter(groupID, &query, cursorTime)
+
+	messages, err := r.fetchMessages(ctx, filter, query.PageSize)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if query.Search != nil && *query.Search != "" {
+		messages = r.filterMessagesByContent(messages, *query.Search)
+	}
+
+	return r.buildPaginatedResponse(messages, query)
+}
+
+func (r *messageRepository) fetchMessages(ctx context.Context, filter string, pageSize int) ([]models.Message, error) {
+	size := int32(pageSize)
 	options := &aztables.ListEntitiesOptions{
 		Filter: &filter,
-		Top:    &pageSize,
+		Top:    &size,
 	}
 
 	pager := r.table.NewListEntitiesPager(options)
-
+	mapper := &entityMapper{}
 	var messages []models.Message
-	var filteredMessages []models.Message
 
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to list messages: %w", err)
+			return nil, fmt.Errorf("failed to list messages: %w", err)
 		}
 
 		for _, entity := range page.Entities {
 			var rawEntity map[string]interface{}
 			if err := json.Unmarshal(entity, &rawEntity); err != nil {
-				return nil, nil, fmt.Errorf("failed to unmarshal entity: %w", err)
+				return nil, fmt.Errorf("failed to unmarshal entity: %w", err)
 			}
 
-			sentAt, err := time.Parse(time.RFC3339Nano, rawEntity["SentAt"].(string))
+			message, err := mapper.toMessage(rawEntity)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse sent time: %w", err)
+				return nil, err
 			}
-
-			messageID, err := uuid.Parse(rawEntity["RowKey"].(string))
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse message ID: %w", err)
-			}
-
-			senderID, err := uuid.Parse(rawEntity["SenderID"].(string))
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse sender ID: %w", err)
-			}
-
-			content, _ := rawEntity["Content"].(string)
-			message := models.Message{
-				ID:         messageID,
-				GroupID:    groupID,
-				SenderID:   senderID,
-				SenderName: rawEntity["SenderName"].(string),
-				Content:    rawEntity["Content"].(string),
-				SentAt:     sentAt,
-				IsPinned:   rawEntity["IsPinned"].(bool),
-			}
-
-			// If search is provided, filter in memory because Azure Tables does not support full-text search
-			if query.Search != nil && *query.Search != "" {
-				if strings.Contains(
-					strings.ToLower(content),
-					strings.ToLower(*query.Search),
-				) {
-					filteredMessages = append(filteredMessages, message)
-				}
-			} else {
-				messages = append(messages, message)
-			}
+			messages = append(messages, *message)
 		}
 	}
 
-	if query.Search != nil && *query.Search != "" {
-		messages = filteredMessages
-	}
+	return messages, nil
+}
 
+func (r *messageRepository) filterMessagesByContent(messages []models.Message, search string) []models.Message {
+	var filtered []models.Message
+	searchLower := strings.ToLower(search)
+
+	for _, msg := range messages {
+		if strings.Contains(strings.ToLower(msg.Content), searchLower) {
+			filtered = append(filtered, msg)
+		}
+	}
+	return filtered
+}
+
+// ptr returns a pointer to the string
+func ptr(s string) *string {
+	return &s
+}
+
+func (r *messageRepository) buildPaginatedResponse(messages []models.Message, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
 	pagination := &models.PaginationResponse{}
+
 	if len(messages) > 0 {
 		if len(messages) > query.PageSize {
 			messages = messages[:query.PageSize]
@@ -238,40 +302,40 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 	return messages, pagination, nil
 }
 
-// ptr returns a pointer to the string
-func ptr(s string) *string {
-	return &s
-}
-
 func (r *messageRepository) CountUnreadMessages(ctx context.Context, groupID uuid.UUID, lastReadTime time.Time) (int, error) {
-	filter := fmt.Sprintf("PartitionKey eq '%s' and SentAt gt '%s'", groupID.String(), lastReadTime.UTC().Format(time.RFC3339))
+	qb := &queryBuilder{}
+	filter := qb.buildUnreadMessagesFilter(groupID, lastReadTime)
+
+	// Only select PartitionKey to minimize data transfer
 	selectFields := "PartitionKey"
 	options := &aztables.ListEntitiesOptions{
 		Filter: &filter,
 		Select: &selectFields,
 	}
 
-	unreadCount := 0
+	return r.countFilteredEntities(ctx, options)
+}
+
+func (r *messageRepository) countFilteredEntities(ctx context.Context, options *aztables.ListEntitiesOptions) (int, error) {
 	pager := r.table.NewListEntitiesPager(options)
+	count := 0
+
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return 0, fmt.Errorf("failed to list unread messages: %w", err)
+			return 0, fmt.Errorf("failed to list entities: %w", err)
 		}
-		unreadCount += len(page.Entities)
+		count += len(page.Entities)
 	}
 
-	return unreadCount, nil
+	return count, nil
 }
 
 func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (time.Time, error) {
-	partitionKey := groupID.String()
-	rowKey := userID.String()
-
-	entity, err := r.table.GetEntity(ctx, partitionKey, rowKey, nil)
+	entity, err := r.table.GetEntity(ctx, groupID.String(), userID.String(), nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "ResourceNotFound") {
-			// Return the current time if the entity does not exist. For example: If the user has not read any messages
+			// Return the current time if the entity does not exist
 			return time.Now().UTC(), nil
 		}
 		return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
@@ -282,10 +346,6 @@ func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UU
 		return time.Time{}, fmt.Errorf("failed to unmarshal entity: %w", err)
 	}
 
-	lastReadTime, err := time.Parse(time.RFC3339, rawEntity["LastReadTime"].(string))
-	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to parse last read time: %w", err)
-	}
-
-	return lastReadTime, nil
+	mapper := &entityMapper{}
+	return mapper.parseLastReadTime(rawEntity)
 }
