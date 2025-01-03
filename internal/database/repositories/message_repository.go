@@ -131,18 +131,8 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, groupID uuid.UUI
 }
 
 func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
+	// Filter messages by group ID
 	filter := fmt.Sprintf("PartitionKey eq '%s'", groupID.String())
-
-	// Add search filter if provided
-	if query.Search != nil && *query.Search != "" {
-		filter += fmt.Sprintf(" and Content ne '' and Content containing '%s'", *query.Search)
-	}
-
-	pageSize := int32(query.PageSize)
-	options := &aztables.ListEntitiesOptions{
-		Filter: &filter,
-		Top:    &pageSize,
-	}
 
 	if query.Cursor != nil && *query.Cursor != "" {
 		cursorUUID, err := uuid.Parse(*query.Cursor)
@@ -155,18 +145,26 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 			return nil, nil, fmt.Errorf("invalid cursor: %w", err)
 		}
 
-		cursorTime := cursorMsg.SentAt.UTC().Format(time.RFC3339)
+		// Azure Tables expects ISO8601 format directly
+		cursorTime := cursorMsg.SentAt.UTC().Format("2006-01-02T15:04:05Z")
 		if query.Direction == "previous" {
 			filter += fmt.Sprintf(" and SentAt gt '%s'", cursorTime)
 		} else {
 			filter += fmt.Sprintf(" and SentAt lt '%s'", cursorTime)
 		}
-		options.Filter = &filter
+	}
+
+	pageSize := int32(query.PageSize)
+	options := &aztables.ListEntitiesOptions{
+		Filter: &filter,
+		Top:    &pageSize,
 	}
 
 	pager := r.table.NewListEntitiesPager(options)
 
 	var messages []models.Message
+	var filteredMessages []models.Message
+
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -179,7 +177,7 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 				return nil, nil, fmt.Errorf("failed to unmarshal entity: %w", err)
 			}
 
-			sentAt, err := time.Parse(time.RFC3339, rawEntity["SentAt"].(string))
+			sentAt, err := time.Parse(time.RFC3339Nano, rawEntity["SentAt"].(string))
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse sent time: %w", err)
 			}
@@ -194,6 +192,7 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 				return nil, nil, fmt.Errorf("failed to parse sender ID: %w", err)
 			}
 
+			content, _ := rawEntity["Content"].(string)
 			message := models.Message{
 				ID:         messageID,
 				GroupID:    groupID,
@@ -203,8 +202,23 @@ func (r *messageRepository) GetMessages(ctx context.Context, groupID uuid.UUID, 
 				SentAt:     sentAt,
 				IsPinned:   rawEntity["IsPinned"].(bool),
 			}
-			messages = append(messages, message)
+
+			// If search is provided, filter in memory because Azure Tables does not support full-text search
+			if query.Search != nil && *query.Search != "" {
+				if strings.Contains(
+					strings.ToLower(content),
+					strings.ToLower(*query.Search),
+				) {
+					filteredMessages = append(filteredMessages, message)
+				}
+			} else {
+				messages = append(messages, message)
+			}
 		}
+	}
+
+	if query.Search != nil && *query.Search != "" {
+		messages = filteredMessages
 	}
 
 	pagination := &models.PaginationResponse{}
@@ -256,6 +270,10 @@ func (r *messageRepository) GetLastReadTime(ctx context.Context, groupID uuid.UU
 
 	entity, err := r.table.GetEntity(ctx, partitionKey, rowKey, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "ResourceNotFound") {
+			// Return the current time if the entity does not exist. For example: If the user has not read any messages
+			return time.Now().UTC(), nil
+		}
 		return time.Time{}, fmt.Errorf("failed to get last read time: %w", err)
 	}
 
