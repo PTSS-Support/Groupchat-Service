@@ -3,6 +3,7 @@ package controllers
 import (
 	"Groupchat-Service/internal/services"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"net/http"
 )
 
@@ -26,24 +27,23 @@ func (c *fcmTokenController) SaveToken(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&request); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.respondWithError(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	groupID, err := c.validationService.ValidateGroupID(ctx.Param("groupId"))
+	groupID, userID, err := c.validateGroupAndUser(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
+		c.respondWithError(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	userID, err := c.validationService.ValidateUserID(ctx.Param("userId"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+	if err := c.validationService.ValidateToken(request.Token); err != nil {
+		c.respondWithError(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := c.fcmTokenService.SaveToken(ctx.Request.Context(), groupID, userID, request.Token); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save token"})
+		c.respondWithError(ctx, http.StatusInternalServerError, "Failed to save token")
 		return
 	}
 
@@ -51,22 +51,34 @@ func (c *fcmTokenController) SaveToken(ctx *gin.Context) {
 }
 
 func (c *fcmTokenController) DeleteToken(ctx *gin.Context) {
-	groupID, err := c.validationService.ValidateGroupID(ctx.Param("groupId"))
+	groupID, userID, err := c.validateGroupAndUser(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
-		return
-	}
-
-	userID, err := c.validationService.ValidateUserID(ctx.Param("userId"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		c.respondWithError(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := c.fcmTokenService.DeleteToken(ctx.Request.Context(), groupID, userID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete token"})
+		c.respondWithError(ctx, http.StatusInternalServerError, "Failed to delete token")
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "Token deleted successfully"})
+}
+
+func (c *fcmTokenController) validateGroupAndUser(ctx *gin.Context) (uuid.UUID, uuid.UUID, error) {
+	groupID, err := c.validationService.ValidateGroupID(ctx.Param("groupId"))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
+	userID, err := c.validationService.ValidateUserID(ctx.Param("userId"))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
+	return groupID, userID, nil
+}
+
+func (c *fcmTokenController) respondWithError(ctx *gin.Context, code int, message string) {
+	ctx.JSON(code, gin.H{"error": message})
 }

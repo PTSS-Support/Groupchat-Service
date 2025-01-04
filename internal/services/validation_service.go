@@ -13,6 +13,7 @@ const (
 	MinPageSize     = 1
 	MaxPageSize     = 50
 	MaxSearchLength = 100
+	MaxTokenLength  = 1024
 )
 
 type validationService struct{}
@@ -83,4 +84,11 @@ func (v *validationService) ValidateUserID(userID string) (uuid.UUID, error) {
 	}
 
 	return parsedUserID, nil
+}
+
+func (v *validationService) ValidateToken(token string) error {
+	if len(token) == 0 || len(token) > MaxTokenLength {
+		return errors.New("invalid token length")
+	}
+	return nil
 }

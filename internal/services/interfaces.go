@@ -21,6 +21,7 @@ type ValidationService interface {
 	ValidateUserContext(ctx context.Context) (uuid.UUID, string, error)
 	ValidateGroupID(groupID string) (uuid.UUID, error)
 	ValidateUserID(userID string) (uuid.UUID, error)
+	ValidateToken(token string) error
 }
 
 type FCMTokenService interface {
