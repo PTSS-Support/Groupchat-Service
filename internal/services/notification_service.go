@@ -53,18 +53,8 @@ type BatchResponse struct {
 }
 
 func (s *FCMNotificationService) SendGroupMessage(message Message, deviceTokens []string) (*BatchResponse, error) {
-	notification := &messaging.Notification{
-		Title: fmt.Sprintf("New message from %s", message.SenderName),
-		Body:  message.Content,
-	}
-
-	data := map[string]string{
-		"groupId":    message.GroupID,
-		"senderId":   message.SenderID,
-		"senderName": message.SenderName,
-		"timestamp":  fmt.Sprintf("%d", message.Timestamp),
-		"type":       "group_message",
-	}
+	notification := s.createNotification(message)
+	data := s.createData(message)
 
 	batchSize := 500
 	response := &BatchResponse{
@@ -79,65 +69,98 @@ func (s *FCMNotificationService) SendGroupMessage(message Message, deviceTokens 
 
 		batch := deviceTokens[i:end]
 
-		// Get the last read time for the user
-		lastReadTime, err := s.messageRepo.GetLastReadTime(s.ctx, uuid.MustParse(message.GroupID), uuid.MustParse(message.SenderID))
+		badgeNumber, err := s.getBadgeNumber(message.GroupID, message.SenderID)
 		if err != nil {
-			return response, fmt.Errorf("error getting last read time: %v", err)
+			return response, err
 		}
 
-		badgeNumber, err := s.messageRepo.CountUnreadMessages(s.ctx, uuid.MustParse(message.GroupID), lastReadTime)
-		if err != nil {
-			return response, fmt.Errorf("error counting unread messages: %v", err)
-		}
-
-		batchMessage := &messaging.MulticastMessage{
-			Tokens:       batch,
-			Notification: notification,
-			Data:         data,
-			Android: &messaging.AndroidConfig{
-				Priority: "high",
-				Notification: &messaging.AndroidNotification{
-					ClickAction: "OPEN_GROUP_CHAT",
-					ChannelID:   "support_group_messages",
-				},
-			},
-			APNS: &messaging.APNSConfig{
-				Headers: map[string]string{
-					"apns-priority": "10",
-				},
-				Payload: &messaging.APNSPayload{
-					Aps: &messaging.Aps{
-						Alert: &messaging.ApsAlert{
-							Title: notification.Title,
-							Body:  notification.Body,
-						},
-						Sound: "default",
-						Badge: &badgeNumber,
-					},
-				},
-			},
-		}
+		batchMessage := s.createBatchMessage(batch, notification, data, badgeNumber)
 
 		batchResponse, err := s.client.SendEachForMulticast(s.ctx, batchMessage)
 		if err != nil {
 			return response, fmt.Errorf("error sending batch: %v", err)
 		}
 
-		response.SuccessCount += batchResponse.SuccessCount
-		response.FailureCount += batchResponse.FailureCount
-
-		for idx, resp := range batchResponse.Responses {
-			if !resp.Success {
-				if resp.Error != nil && resp.Error.Error() == "registration-token-not-registered" {
-					response.InvalidTokens = append(response.InvalidTokens, batch[idx])
-					log.Printf("Invalid token found: %s", batch[idx])
-				}
-			}
-		}
+		s.processBatchResponse(batchResponse, batch, response)
 	}
 
 	log.Printf("Message sending complete. Success: %d, Failure: %d, Invalid Tokens: %d",
 		response.SuccessCount, response.FailureCount, len(response.InvalidTokens))
 
 	return response, nil
+}
+
+func (s *FCMNotificationService) createNotification(message Message) *messaging.Notification {
+	return &messaging.Notification{
+		Title: fmt.Sprintf("New message from %s", message.SenderName),
+		Body:  message.Content,
+	}
+}
+
+func (s *FCMNotificationService) createData(message Message) map[string]string {
+	return map[string]string{
+		"groupId":    message.GroupID,
+		"senderId":   message.SenderID,
+		"senderName": message.SenderName,
+		"timestamp":  fmt.Sprintf("%d", message.Timestamp),
+		"type":       "group_message",
+	}
+}
+
+func (s *FCMNotificationService) getBadgeNumber(groupID, senderID string) (int, error) {
+	lastReadTime, err := s.messageRepo.GetLastReadTime(s.ctx, uuid.MustParse(groupID), uuid.MustParse(senderID))
+	if err != nil {
+		return 0, fmt.Errorf("error getting last read time: %v", err)
+	}
+
+	badgeNumber, err := s.messageRepo.CountUnreadMessages(s.ctx, uuid.MustParse(groupID), lastReadTime)
+	if err != nil {
+		return 0, fmt.Errorf("error counting unread messages: %v", err)
+	}
+
+	return badgeNumber, nil
+}
+
+func (s *FCMNotificationService) createBatchMessage(batch []string, notification *messaging.Notification, data map[string]string, badgeNumber int) *messaging.MulticastMessage {
+	return &messaging.MulticastMessage{
+		Tokens:       batch,
+		Notification: notification,
+		Data:         data,
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				ClickAction: "OPEN_GROUP_CHAT",
+				ChannelID:   "support_group_messages",
+			},
+		},
+		APNS: &messaging.APNSConfig{
+			Headers: map[string]string{
+				"apns-priority": "10",
+			},
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Alert: &messaging.ApsAlert{
+						Title: notification.Title,
+						Body:  notification.Body,
+					},
+					Sound: "default",
+					Badge: &badgeNumber,
+				},
+			},
+		},
+	}
+}
+
+func (s *FCMNotificationService) processBatchResponse(batchResponse *messaging.BatchResponse, batch []string, response *BatchResponse) {
+	response.SuccessCount += batchResponse.SuccessCount
+	response.FailureCount += batchResponse.FailureCount
+
+	for idx, resp := range batchResponse.Responses {
+		if !resp.Success {
+			if resp.Error != nil && resp.Error.Error() == "registration-token-not-registered" {
+				response.InvalidTokens = append(response.InvalidTokens, batch[idx])
+				log.Printf("Invalid token found: %s", batch[idx])
+			}
+		}
+	}
 }
