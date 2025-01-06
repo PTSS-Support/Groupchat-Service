@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"github.com/spf13/viper"
 )
@@ -47,7 +48,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.SetDefault("debug", false)
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			fmt.Println("Warning: Config file not found, using environment variables")
 		} else {
 			return nil, fmt.Errorf("error reading config file: %w", err)
