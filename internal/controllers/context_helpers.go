@@ -1,29 +1,42 @@
 package controllers
 
 import (
-	"context"
 	"errors"
+	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 // getGroupIDFromContext extracts the group ID from the context
-func getGroupIDFromContext(ctx context.Context) (uuid.UUID, error) {
-	groupID, ok := ctx.Value("groupID").(uuid.UUID)
+func getGroupIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
+	groupID, ok := ctx.Get("groupID")
 	if !ok {
 		return uuid.Nil, errors.New("group ID not found in context")
 	}
-	return groupID, nil
+
+	parsedGroupID, err := uuid.Parse(fmt.Sprintf("%v", groupID))
+	if err != nil {
+		return uuid.Nil, errors.New("invalid group ID")
+	}
+
+	return parsedGroupID, nil
 }
 
-// getUserFromContext extracts the user ID and user name from the context
-func getUserFromContext(ctx context.Context) (uuid.UUID, string, error) {
-	userID, ok := ctx.Value("userID").(uuid.UUID)
+// getUserFromContext extracts the user ID from the context
+func getUserIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
+	userID, ok := ctx.Get("userID")
 	if !ok {
-		return uuid.Nil, "", errors.New("user ID not found in context")
+		return uuid.Nil, errors.New("user ID not found in context")
 	}
-	userName, ok := ctx.Value("userName").(string)
-	if !ok {
-		return uuid.Nil, "", errors.New("user name not found in context")
+
+	parsedUserID, err := uuid.Parse(fmt.Sprintf("%v", userID))
+	if err != nil {
+		return uuid.Nil, errors.New("invalid user ID")
 	}
-	return userID, userName, nil
+
+	return parsedUserID, nil
+}
+
+func respondWithError(ctx *gin.Context, code int, message string) {
+	ctx.JSON(code, gin.H{"error": message})
 }

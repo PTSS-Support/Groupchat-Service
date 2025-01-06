@@ -49,7 +49,7 @@ func main() {
 	}
 
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
-	validationService := services.NewValidationService()
+	validationService := services.NewValidationService(cfg.UserServiceURL)
 	fcmTokenService := services.NewFCMTokenService(fcmTokenRepo)
 
 	// Initialize controllers
@@ -72,6 +72,10 @@ func main() {
 	// Add Prometheus middleware BEFORE other middleware
 	router.Use(middleware.PrometheusMiddleware())
 
+	// Add JWT middleware
+	router.Use(middleware.JWTMiddleware(cfg.JWTSecretKey))
+
+	// Register routes
 	messageController.RegisterRoutes(router)
 	fcmTokenController.RegisterRoutes(router)
 

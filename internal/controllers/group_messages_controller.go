@@ -29,9 +29,9 @@ func (c *FCMMessageController) RegisterRoutes(router *gin.Engine) {
 }
 
 func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
-	groupID, err := uuid.Parse(ctx.Param("groupId"))
+	groupID, err := getGroupIDFromContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
+		respondWithError(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 
@@ -44,46 +44,50 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 
 	query, err := c.validationService.ValidatePaginationQuery(ctx.Request.Context(), queryParams)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondWithError(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	messages, pagination, err := c.messageService.GetMessages(ctx, groupID, query)
+	messages, pagination, err := c.messageService.GetMessages(ctx.Request.Context(), groupID, query)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving messages"})
+		respondWithError(ctx, http.StatusInternalServerError, "Error getting messages")
 		return
 	}
 
-	response := models.PaginatedResponse{
-		Data:       messages,
-		Pagination: *pagination,
-	}
-
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, gin.H{
+		"data":       messages,
+		"pagination": pagination,
+	})
 }
 
 func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
-	userID, userName, err := c.validationService.ValidateUserContext(ctx.Request.Context())
+	userID, err := getUserIDFromContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		respondWithError(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	groupID, err := c.validationService.ValidateGroupID(ctx.Param("groupId"))
+	groupID, err := getGroupIDFromContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondWithError(ctx, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	userName, err := c.validationService.FetchUserName(ctx.Request.Context())
+	if err != nil {
+		respondWithError(ctx, http.StatusInternalServerError, "Error fetching user name")
 		return
 	}
 
 	var createReq models.MessageCreate
 	if err := ctx.ShouldBindJSON(&createReq); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		respondWithError(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	message, err := c.messageService.CreateMessage(ctx.Request.Context(), groupID, userID, userName, createReq)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating message"})
+		respondWithError(ctx, http.StatusInternalServerError, "Error creating message")
 		return
 	}
 
@@ -91,21 +95,21 @@ func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
 }
 
 func (c *FCMMessageController) ToggleMessagePin(ctx *gin.Context) {
-	messageID, err := uuid.Parse(ctx.Param("messageId"))
+	groupID, err := getGroupIDFromContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid message ID"})
+		respondWithError(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	groupID, err := uuid.Parse(ctx.Param("groupId"))
+	messageID, err := uuid.Parse(ctx.Param("messageId"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
+		respondWithError(ctx, http.StatusBadRequest, "Invalid message ID")
 		return
 	}
 
 	message, err := c.messageService.ToggleMessagePin(ctx.Request.Context(), groupID, messageID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error toggling message pin"})
+		respondWithError(ctx, http.StatusInternalServerError, "Error toggling message pin")
 		return
 	}
 

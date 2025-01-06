@@ -16,6 +16,10 @@ type Config struct {
 	Environment string `mapstructure:"environment"`
 	Port        int    `mapstructure:"port"`
 	Debug       bool   `mapstructure:"debug"`
+
+	// User Service Configuration
+	UserServiceURL string `mapstructure:"user_service_url"`
+	JWTSecretKey   string `mapstructure:"jwt_secret_key"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -34,6 +38,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.BindEnv("environment", "APP_ENV")
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
+	viper.BindEnv("user_service_url", "USER_SERVICE_URL")
+	viper.BindEnv("jwt_secret_key", "JWT_SECRET_KEY")
 
 	// Set defaults
 	viper.SetDefault("environment", "development")
@@ -51,8 +57,6 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
-
-	// Validate required fields
 	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
@@ -63,6 +67,12 @@ func LoadConfig(configPath string) (*Config, error) {
 func validateConfig(config *Config) error {
 	if config.FirebaseCredentialFile == "" {
 		return fmt.Errorf("firebase_credential_file is required")
+	}
+	if config.UserServiceURL == "" {
+		return fmt.Errorf("user_service_url is required")
+	}
+	if config.JWTSecretKey == "" {
+		return fmt.Errorf("jwt_secret_key is required")
 	}
 	return nil
 }
