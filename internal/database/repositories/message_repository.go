@@ -20,7 +20,6 @@ type MessageEntity struct {
 	PartitionKey string `json:"PartitionKey"`
 	RowKey       string `json:"RowKey"`
 	SenderID     string `json:"SenderID"`
-	SenderName   string `json:"SenderName"`
 	Content      string `json:"Content"`
 	SentAt       string `json:"SentAt"`
 	IsPinned     bool   `json:"IsPinned"`
@@ -41,7 +40,6 @@ func (m *entityMapper) toEntity(groupID uuid.UUID, message *models.Message) Mess
 		PartitionKey: groupID.String(),
 		RowKey:       message.ID.String(),
 		SenderID:     message.SenderID.String(),
-		SenderName:   message.SenderName,
 		Content:      message.Content,
 		SentAt:       message.SentAt.UTC().Format(time.RFC3339),
 		IsPinned:     message.IsPinned,
@@ -70,13 +68,12 @@ func (m *entityMapper) toMessage(rawEntity map[string]interface{}) (*models.Mess
 	}
 
 	return &models.Message{
-		ID:         messageID,
-		GroupID:    groupID,
-		SenderID:   senderID,
-		SenderName: rawEntity["SenderName"].(string),
-		Content:    rawEntity["Content"].(string),
-		SentAt:     sentAt,
-		IsPinned:   rawEntity["IsPinned"].(bool),
+		ID:       messageID,
+		GroupID:  groupID,
+		SenderID: senderID,
+		Content:  rawEntity["Content"].(string),
+		SentAt:   sentAt,
+		IsPinned: rawEntity["IsPinned"].(bool),
 	}, nil
 }
 

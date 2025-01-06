@@ -31,7 +31,7 @@ func NewMessageService(
 	}
 }
 
-func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
+func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.MessageResponse, *models.PaginationResponse, error) {
 	// Fetch messages from the repository
 	messages, pagination, err := s.messageRepo.GetMessages(ctx, groupID, query)
 	if err != nil {
@@ -50,26 +50,36 @@ func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, que
 		userIDToName[member.ID] = member.UserName
 	}
 
-	// Update sender names in the messages
-	for i, message := range messages {
+	// Create a slice of MessageResponse
+	var messageResponses []models.MessageResponse
+	for _, message := range messages {
+		senderName := ""
 		if name, ok := userIDToName[message.SenderID]; ok {
-			messages[i].SenderName = name
+			senderName = name
 		}
+		messageResponses = append(messageResponses, models.MessageResponse{
+			ID:         message.ID,
+			GroupID:    message.GroupID,
+			SenderID:   message.SenderID,
+			SenderName: senderName,
+			Content:    message.Content,
+			SentAt:     message.SentAt,
+			IsPinned:   message.IsPinned,
+		})
 	}
 
-	return messages, pagination, nil
+	return messageResponses, pagination, nil
 }
 
 func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, userName string, create models.MessageCreate) (*models.Message, error) {
 	// Create message entity
 	message := &models.Message{
-		ID:         uuid.New(),
-		GroupID:    groupID,
-		SenderID:   userID,
-		SenderName: userName,
-		Content:    create.Content,
-		SentAt:     time.Now().UTC(),
-		IsPinned:   false,
+		ID:       uuid.New(),
+		GroupID:  groupID,
+		SenderID: userID,
+		Content:  create.Content,
+		SentAt:   time.Now().UTC(),
+		IsPinned: false,
 	}
 
 	// Save to database
@@ -89,7 +99,7 @@ func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, u
 	go func() {
 		_, err := s.notificationService.SendGroupMessage(Message{
 			SenderID:   message.SenderID.String(),
-			SenderName: message.SenderName,
+			SenderName: userName,
 			Content:    message.Content,
 			GroupID:    message.GroupID.String(),
 			Timestamp:  message.SentAt.Unix(),
