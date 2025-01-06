@@ -48,8 +48,8 @@ func main() {
 		log.Fatalf("Failed to create notification service: %v", err)
 	}
 
-	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService)
 	validationService := services.NewValidationService(cfg.UserServiceURL)
+	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService, validationService)
 	fcmTokenService := services.NewFCMTokenService(fcmTokenRepo)
 
 	// Initialize controllers

@@ -23,6 +23,7 @@ type ValidationService interface {
 	ValidateUserID(userID string) (uuid.UUID, error)
 	ValidateToken(token string) error
 	FetchUserName(ctx context.Context) (string, error)
+	FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]models.UserSummary, error)
 }
 
 type FCMTokenService interface {

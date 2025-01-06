@@ -14,25 +14,49 @@ type messageService struct {
 	messageRepo         repositories.MessageRepository
 	fcmTokenRepo        repositories.FCMTokenRepository
 	notificationService NotificationService
+	validationService   ValidationService
 }
 
 func NewMessageService(
 	messageRepo repositories.MessageRepository,
 	fcmTokenRepo repositories.FCMTokenRepository,
 	notificationService NotificationService,
+	validationService ValidationService,
 ) MessageService {
 	return &messageService{
 		messageRepo:         messageRepo,
 		fcmTokenRepo:        fcmTokenRepo,
 		notificationService: notificationService,
+		validationService:   validationService,
 	}
 }
 
 func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, query models.PaginationQuery) ([]models.Message, *models.PaginationResponse, error) {
+	// Fetch messages from the repository
 	messages, pagination, err := s.messageRepo.GetMessages(ctx, groupID, query)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting messages from repository: %w", err)
 	}
+
+	// Fetch group members to get their usernames
+	groupMembers, err := s.validationService.FetchGroupMembers(ctx, groupID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error fetching group members: %w", err)
+	}
+
+	// Create a map of userID to userName
+	userIDToName := make(map[uuid.UUID]string)
+	for _, member := range groupMembers {
+		userIDToName[member.ID] = member.UserName
+	}
+
+	// Update sender names in the messages
+	for i, message := range messages {
+		if name, ok := userIDToName[message.SenderID]; ok {
+			messages[i].SenderName = name
+		}
+	}
+
 	return messages, pagination, nil
 }
 

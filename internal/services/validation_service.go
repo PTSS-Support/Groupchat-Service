@@ -142,3 +142,38 @@ func (v *validationService) FetchUserName(ctx context.Context) (string, error) {
 
 	return fmt.Sprintf("%s %s", result.FirstName, result.LastName), nil
 }
+
+func (v *validationService) FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]models.UserSummary, error) {
+	url := fmt.Sprintf("%s/groups/%s/members", v.userServiceURL, groupID.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch group members: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch group members: user service returned non-200 status code")
+	}
+
+	var members []models.UserSummary
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return members, nil
+}
+
+type User struct {
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	FirstName string    `json:"firstName"`
+	LastName  string    `json:"lastName"`
+	Role      string    `json:"role"`
+	GroupID   uuid.UUID `json:"groupId"`
+	LastSeen  string    `json:"lastSeen"`
+}
