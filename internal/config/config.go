@@ -11,7 +11,7 @@ type Config struct {
 	FirebaseCredentialFile string `mapstructure:"firebase_credential_file"`
 
 	// Azure Storage Configuration
-	AzureConnectionString string `mapstructure:"azure_connection_string"`
+	AzureConnectionString string `mapstructure:"azure_groupchat_connection_string"`
 
 	// Application Configuration
 	Environment string `mapstructure:"environment"`
@@ -36,7 +36,7 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Bind environment variables to keys
 	viper.BindEnv("firebase_credential_file", "FIREBASE_CREDENTIAL_FILE")
-	viper.BindEnv("azure_connection_string", "AZURE_CONNECTION_STRING")
+	viper.BindEnv("azure_connection_string", "AZURE_GROUPCHAT_CONNECTION_STRING")
 	viper.BindEnv("environment", "APP_ENV")
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
