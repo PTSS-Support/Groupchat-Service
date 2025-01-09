@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            # 1. Application-wide configs (lowest priority)
+            - configMapRef:
+                name: app-config
+                optional: true
+            # 2. App-specific configs
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+                optional: true
+            # 3. Environment-wide configs
+            - configMapRef:
+                name: env-config
+                optional: true
+            # 4. Environment & app specific configs (highest priority)
+            - configMapRef:
+                name: env-{{ .Release.Name }}-config
+                optional: true
+            - secretRef:
+                name: env-secrets
+                optional: true
+            - secretRef:
+                name: {{ .Release.Name }}-secrets
+                optional: true
+          ports:
+            {{- toYaml .Values.ports | nindent 12 }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,211 @@
+name: 🚀 Deploy to Development
+
+on:
+  push:
+    branches: [ development ]
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      tag:
+        description: 'Image tag (optional)'
+        required: false
+        default: 'latest'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.repo_name.outputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set Repository Name
+        id: repo_name
+        run: |
+          echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "artifact_name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]' | tr '/' '-')" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Go Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+          clean: true
+          continue-on-error: true
+
+      - name: Build
+        run: |
+          cd cmd 
+          mkdir -p build/
+          CGO_ENABLED=0 GOOS=linux go build -o ../build/main .
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.repo_name.outputs.artifact_name }}
+          path: build/
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.generate_tag.outputs.version }}
+      repo_name: ${{ steps.repo_name.outputs.name }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set Repository Name
+        id: repo_name
+        run: |
+          echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: build/
+
+      - name: Generate Version Tag
+        id: generate_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.tag }}" != "latest" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(date +'%Y%m%d')-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.PACKAGE_PAT }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }} .
+          docker push ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }}
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: development
+    outputs:
+      route_host: ${{ steps.route_host.outputs.name }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set App Name
+        id: app_name
+        run: |
+          echo "name=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]' | tr '_' '-')" >> $GITHUB_OUTPUT
+
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz
+          tar -xvf openshift-client-linux.tar.gz -C /usr/local/bin
+          chmod +x /usr/local/bin/oc
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Login to OpenShift
+        run: |
+          oc login --token=${{ secrets.OSC_DEV_TOKEN }} --server=${{ secrets.OSC_SERVER }}
+
+      - name: Clone Platform Config
+        uses: actions/checkout@v3
+        with:
+          repository: PTSS-Support/platform-config
+          path: platform-config
+          token: ${{ secrets.PLATFORM_CONFIG_PAT }}
+
+      - name: Apply Platform Configs
+        run: |
+          NAMESPACE=${{ vars.OSC_DEV_PROJECT }}
+          
+          # Apply common configs
+          for config_type in configmaps secrets; do
+            for path in \
+              "platform-config/common/${config_type}" \
+              "platform-config/apps/${{ steps.app_name.outputs.name }}/${config_type}" \
+              "platform-config/environments/dev/common/${config_type}" \
+              "platform-config/environments/dev/apps/${{ steps.app_name.outputs.name }}/${config_type}"; do
+                if [ -d "${path}" ] && [ "$(ls -A ${path})" ]; then
+                  oc apply -f "${path}" -n ${NAMESPACE}
+                fi
+            done
+          done
+
+      - name: Set Route Host
+        id: route_host
+        run: |
+          ROUTE_HOST="${{ steps.app_name.outputs.name }}-dev.${{ vars.APPS_DOMAIN }}"
+          echo "name=${ROUTE_HOST}" >> $GITHUB_OUTPUT
+
+      - name: Deploy to OpenShift Dev
+        run: |
+          helm upgrade --install ${{ steps.app_name.outputs.name }} ./helm \
+            --namespace ${{ vars.OSC_DEV_PROJECT }} \
+            --values ./helm/values-dev.yaml \
+            --set image.registry=ghcr.io \
+            --set image.repository=${{ needs.package.outputs.repo_name }} \
+            --set image.tag=${{ needs.package.outputs.image_tag }} \
+            --set route.host=${{ steps.route_host.outputs.name  }}
+
+      - name: Wait for Deployment
+        run: |
+          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=250s
+
+      - name: Verify Deployment
+        run: |
+          # Check if all pods are ready
+          READY_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.status.readyReplicas}')
+          DESIRED_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.spec.replicas}')
+          
+          if [ "$READY_PODS" != "$DESIRED_PODS" ]; then
+            echo "❌ Deployment verification failed: $READY_PODS/$DESIRED_PODS pods ready"
+            exit 1
+          fi
+
+          echo "✅ Deployment verification successful: $READY_PODS/$DESIRED_PODS pods ready"
+
+  test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install k6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz
+          tar -xzf k6-v0.46.0-linux-amd64.tar.gz
+          sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/
+          k6 version
+
+      - name: Run k6 Performance Tests
+        run: |
+          ROUTE_HOST=${{ needs.deploy.outputs.route_host }} k6 run tests/k6/*.js
+
+      - name: Run E2E Tests
+        run: |
+          echo "TODO: Add E2E tests using your preferred testing framework"
+          echo "These tests should run against the newly deployed dev environment"
