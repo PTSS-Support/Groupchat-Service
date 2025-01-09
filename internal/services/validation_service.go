@@ -21,11 +21,13 @@ const (
 )
 
 type validationService struct {
-	userServiceURL string
+	getUserServiceURL func() string
 }
 
-func NewValidationService(userServiceURL string) ValidationService {
-	return &validationService{userServiceURL: userServiceURL}
+func NewValidationService(getUserServiceURL func() string) ValidationService {
+	return &validationService{
+		getUserServiceURL: getUserServiceURL,
+	}
 }
 
 func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error) {
@@ -102,7 +104,7 @@ func (v *validationService) ValidateToken(token string) error {
 }
 
 func (v *validationService) FetchUserName(ctx context.Context) (string, error) {
-	url := fmt.Sprintf("%s/users/me", v.userServiceURL)
+	url := fmt.Sprintf("%s/users/me", v.getUserServiceURL())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -144,7 +146,7 @@ func (v *validationService) FetchUserName(ctx context.Context) (string, error) {
 }
 
 func (v *validationService) FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]models.UserSummary, error) {
-	url := fmt.Sprintf("%s/groups/%s/members", v.userServiceURL, groupID.String())
+	url := fmt.Sprintf("%s/groups/%s/members", v.getUserServiceURL(), groupID.String())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

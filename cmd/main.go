@@ -25,6 +25,43 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
+	// Initialize service discoverer
+	serviceDiscoverer, err := config.NewServiceDiscoverer(&cfg.ServiceDiscovery)
+	if err != nil {
+		log.Fatalf("Failed to create service discoverer: %v", err)
+	}
+
+	// Create a context with cancellation for service discovery
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start service discovery
+	urls, errs := serviceDiscoverer.StartDiscovery(ctx)
+
+	// Handle service discovery updates in a separate goroutine
+	var currentUserServiceURL string
+	go func() {
+		for {
+			select {
+			case url := <-urls:
+				currentUserServiceURL = url
+				log.Printf("User service URL updated: %s", url)
+			case err := <-errs:
+				log.Printf("Service discovery error: %v", err)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Create URL provider function
+	getUserServiceURL := func() string {
+		return currentUserServiceURL
+	}
+
+	// Initialize validation service with URL provider
+	validationService := services.NewValidationService(getUserServiceURL)
+
 	// Initialize Azure Table client
 	tableClient, err := repositories.NewTableClient(cfg.AzureConnectionString)
 	if err != nil {
@@ -48,7 +85,6 @@ func main() {
 		log.Fatalf("Failed to create notification service: %v", err)
 	}
 
-	validationService := services.NewValidationService(cfg.UserServiceURL)
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService, validationService)
 	fcmTokenService := services.NewFCMTokenService(fcmTokenRepo)
 
