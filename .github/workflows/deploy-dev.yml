@@ -111,7 +111,7 @@ jobs:
 
       - name: verify docker image
         run: |
-          docker pull ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }}
+          docker pull ghcr.io/${{ needs.package.outputs.repo_name }}:${{ needs.package.outputs.image_tag }}
 
       - name: Set App Name
         id: app_name
