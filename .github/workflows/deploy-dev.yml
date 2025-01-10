@@ -175,7 +175,7 @@ jobs:
 
       - name: Wait for Deployment
         run: |
-          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=500s
+          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=300s
 
       - name: Verify Deployment
         run: |
