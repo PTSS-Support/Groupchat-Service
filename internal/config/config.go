@@ -36,7 +36,7 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Bind environment variables to keys
 	viper.BindEnv("firebase_credential_file", "FIREBASE_CREDENTIAL_FILE")
-	viper.BindEnv("azure_connection_string", "AZURE_GROUPCHAT_CONNECTION_STRING")
+	viper.BindEnv("azure_groupchat_connection_string", "AZURE_GROUPCHAT_CONNECTION_STRING")
 	viper.BindEnv("environment", "APP_ENV")
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
@@ -69,6 +69,9 @@ func LoadConfig(configPath string) (*Config, error) {
 }
 
 func validateConfig(config *Config) error {
+	if config.AzureConnectionString == "" {
+		return fmt.Errorf("azure_connection_string is required")
+	}
 	if config.FirebaseCredentialFile == "" {
 		return fmt.Errorf("firebase_credential_file is required")
 	}
