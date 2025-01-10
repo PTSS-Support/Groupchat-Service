@@ -175,10 +175,18 @@ jobs:
 
       - name: Wait for Deployment
         run: |
-          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=250s
+          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=500s
 
       - name: Verify Deployment
         run: |
+          # Get detailed pod information
+          echo "Pod Details:"
+          oc get pods -n ${{ vars.OSC_DEV_PROJECT }} -l app=${{ steps.app_name.outputs.name }} -o wide
+          
+          # Get pod events
+          echo "Pod Events:"
+          oc get events -n ${{ vars.OSC_DEV_PROJECT }} --sort-by='.lastTimestamp'
+    
           # Check if all pods are ready
           READY_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.status.readyReplicas}')
           DESIRED_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.spec.replicas}')
