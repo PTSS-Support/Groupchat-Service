@@ -20,7 +20,7 @@ type Config struct {
 
 	// User Service Configuration
 	UserServiceURL        string `mapstructure:"user_service_url"`
-	JWTSecretKey          string `mapstructure:"jwt_secret_key"`
+	JWKSURL               string `mapstructure:"jwks_url"`
 	AccessTokenCookieName string `mapstructure:"access_token_cookie_name"`
 }
 
@@ -41,7 +41,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
 	viper.BindEnv("user_service_url", "USER_SERVICE_URL")
-	viper.BindEnv("jwt_secret_key", "JWT_SECRET_KEY")
+	viper.BindEnv("jwks_url", "JWKS_URL")
 	viper.BindEnv("access_token_cookie_name", "ACCESS_TOKEN_COOKIE_NAME")
 
 	// Set defaults
@@ -75,8 +75,8 @@ func validateConfig(config *Config) error {
 	if config.UserServiceURL == "" {
 		return fmt.Errorf("user_service_url is required")
 	}
-	if config.JWTSecretKey == "" {
-		return fmt.Errorf("jwt_secret_key is required")
+	if config.JWKSURL == "" {
+		return fmt.Errorf("jwks_url is required")
 	}
 	if config.AccessTokenCookieName == "" {
 		return fmt.Errorf("access_token_cookie_name is required")

@@ -73,7 +73,7 @@ func main() {
 	router.Use(middleware.PrometheusMiddleware())
 
 	// Add JWT middleware
-	router.Use(middleware.JWTMiddleware(cfg.JWTSecretKey))
+	router.Use(middleware.JWTMiddleware(cfg.JWKSURL))
 
 	// Register routes
 	messageController.RegisterRoutes(router)

@@ -5,6 +5,7 @@ go 1.23
 require (
 	firebase.google.com/go/v4 v4.15.1
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.3.0
+	github.com/MicahParks/keyfunc/v2 v2.1.0
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
