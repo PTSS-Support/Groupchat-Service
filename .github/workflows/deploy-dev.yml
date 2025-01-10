@@ -109,6 +109,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: verify docker image
+        run: |
+          docker pull ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }}
+
       - name: Set App Name
         id: app_name
         run: |
