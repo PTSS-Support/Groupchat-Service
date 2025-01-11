@@ -6,6 +6,7 @@ import (
 	"Groupchat-Service/internal/database/repositories"
 	"Groupchat-Service/internal/middleware"
 	"Groupchat-Service/internal/services"
+	"Groupchat-Service/internal/util"
 	"context"
 	firebase "firebase.google.com/go/v4"
 	"fmt"
@@ -42,6 +43,9 @@ func main() {
 		log.Fatalf("Failed to create FCM token repository: %v", err)
 	}
 
+	// Initialize health repository
+	healthRepo := repositories.NewHealthRepository(cfg.UserServiceURL, util.NewLoggerFactory())
+
 	// Initialize services
 	notificationService, err := services.NewNotificationService(cfg.FirebaseCredentialFile, messageRepo)
 	if err != nil {
@@ -51,10 +55,12 @@ func main() {
 	validationService := services.NewValidationService(cfg.UserServiceURL)
 	messageService := services.NewMessageService(messageRepo, fcmTokenRepo, notificationService, validationService)
 	fcmTokenService := services.NewFCMTokenService(fcmTokenRepo)
+	healthService := services.NewHealthService(healthRepo, util.NewLoggerFactory())
 
 	// Initialize controllers
 	messageController := controllers.NewMessageController(messageService, validationService)
 	fcmTokenController := controllers.NewFCMTokenController(fcmTokenService, validationService)
+	healthController := controllers.NewHealthController(healthService)
 
 	// Set up router
 	router := gin.Default()
@@ -78,7 +84,8 @@ func main() {
 	// Register routes
 	messageController.RegisterRoutes(router)
 	fcmTokenController.RegisterRoutes(router)
-
+	healthController.RegisterRoutes(router)
+	
 	middleware.RegisterMetricsEndpoint(router)
 
 	// Get the path to the serviceAccountKey.json file

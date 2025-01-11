@@ -30,3 +30,9 @@ type FCMTokenService interface {
 	SaveToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, token string) error
 	DeleteToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error
 }
+
+type HealthService interface {
+	CheckHealth(ctx context.Context) (*models.HealthResponse, error)
+	CheckReadiness(ctx context.Context) (*models.HealthResponse, error)
+	CheckLiveness(ctx context.Context) (*models.HealthResponse, error)
+}

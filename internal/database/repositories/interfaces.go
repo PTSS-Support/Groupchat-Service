@@ -21,3 +21,7 @@ type FCMTokenRepository interface {
 	SaveToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, token string) error
 	DeleteToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error
 }
+
+type HealthRepository interface {
+	CheckHealth(ctx context.Context) (*models.HealthResponse, error)
+}

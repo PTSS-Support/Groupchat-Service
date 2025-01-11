@@ -17,3 +17,11 @@ type FCMTokenController interface {
 	SaveToken(ctx *gin.Context)
 	DeleteToken(ctx *gin.Context)
 }
+
+type HealthController interface {
+	RegisterRoutes(router *gin.Engine)
+	getHealth(ctx *gin.Context)
+	getLiveness(ctx *gin.Context)
+	getReadiness(ctx *gin.Context)
+	handleHealthCheck(ctx *gin.Context, check healthCheck)
+}
