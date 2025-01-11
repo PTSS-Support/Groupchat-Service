@@ -12,5 +12,5 @@ export function setup() {
 }
 
 export default function (data) {
-    //healthTest(data);
+    healthTest(data);
 }
