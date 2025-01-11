@@ -3,6 +3,7 @@ package services
 import (
 	"Groupchat-Service/internal/database/repositories"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"log"
@@ -20,7 +21,15 @@ type FCMNotificationService struct {
 
 func NewNotificationService(credentialFile string, messageRepo repositories.MessageRepository) (*FCMNotificationService, error) {
 	ctx := context.Background()
-	opt := option.WithCredentialsFile(credentialFile)
+
+	// Parse the JSON string into a map
+	var credentials map[string]interface{}
+	if err := json.Unmarshal([]byte(credentialFile), &credentials); err != nil {
+		return nil, fmt.Errorf("error parsing firebase credentials: %v", err)
+	}
+
+	// Create a Firebase app with the credentials
+	opt := option.WithCredentialsJSON([]byte(credentialFile))
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing firebase app: %v", err)

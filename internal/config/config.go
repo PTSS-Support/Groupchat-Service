@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/spf13/viper"
+	"os"
+	"strings"
 )
 
 type Config struct {
@@ -61,6 +63,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
+
+	if strings.HasPrefix(config.FirebaseCredentialFile, ".") {
+		content, err := os.ReadFile(config.FirebaseCredentialFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading firebase credential file: %w", err)
+		}
+		config.FirebaseCredentialFile = string(content)
+	}
+
 	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
