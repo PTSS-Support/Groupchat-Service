@@ -7,7 +7,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -20,12 +19,6 @@ func JWTMiddleware(jwksURL string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// Bypass JWT middleware for health check endpoints
-		if strings.HasPrefix(c.Request.URL.Path, "/q/health") {
-			c.Next()
-			return
-		}
-
 		cookieName, err := getCookieName()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
