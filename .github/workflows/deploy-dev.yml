@@ -245,7 +245,7 @@ jobs:
 
       - name: Run k6 Performance Tests
         run: |
-          ROUTE_HOST=${{ needs.deploy.outputs.route_host }} k6 run tests/k6/*.js
+          ROUTE_HOST=${{ needs.deploy.outputs.route_host }} k6 run tests/k6/scenarios/main.js
 
       - name: Run E2E Tests
         run: |
