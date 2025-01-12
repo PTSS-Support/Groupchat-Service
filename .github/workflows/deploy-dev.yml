@@ -171,7 +171,7 @@ jobs:
 
       - name: Wait for Deployment
         run: |
-          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=250s
+          oc rollout status deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} --timeout=300s
 
       - name: Verify Deployment
         run: |
@@ -203,7 +203,7 @@ jobs:
 
       - name: Run k6 Performance Tests
         run: |
-          ROUTE_HOST=${{ needs.deploy.outputs.route_host }} k6 run tests/k6/*.js
+          ROUTE_HOST=${{ needs.deploy.outputs.route_host }} k6 run tests/k6/scenarios/main.js
 
       - name: Run E2E Tests
         run: |

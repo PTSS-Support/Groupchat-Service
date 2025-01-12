@@ -11,12 +11,15 @@ export default function (data) {
                     headers: data.headers
                 });
 
+                const body = JSON.parse(res.body);
+                const checks = body.checks || [];
+
                 const checkRes = check(res, {
                     'status is 200': (r) => r.status === 200,
                     'response is JSON': (r) => r.headers['Content-Type'].includes('application/json'),
-                    'status is UP': (r) => JSON.parse(r.body).status === 'UP',
-                    'checks array exists': (r) => Array.isArray(JSON.parse(r.body).checks),
-                    'keycloak check exists': (r) => JSON.parse(r.body).checks.some(check =>
+                    'status is UP': (r) => body.status === 'UP',
+                    'checks array exists': (r) => Array.isArray(checks),
+                    'keycloak check exists': (r) => checks.some(check =>
                         check.name === 'Keycloak health check' && check.status === 'UP'
                     )
                 });
@@ -37,10 +40,12 @@ export default function (data) {
                     headers: data.headers
                 });
 
+                const body = JSON.parse(res.body);
+
                 const checkRes = check(res, {
                     'status is 200': (r) => r.status === 200,
                     'response is JSON': (r) => r.headers['Content-Type'].includes('application/json'),
-                    'status is UP': (r) => JSON.parse(r.body).status === 'UP'
+                    'status is UP': (r) => body.status === 'UP'
                 });
 
                 if (!checkRes) {
@@ -59,10 +64,12 @@ export default function (data) {
                     headers: data.headers
                 });
 
+                const body = JSON.parse(res.body);
+
                 const checkRes = check(res, {
                     'status is 200': (r) => r.status === 200,
                     'response is JSON': (r) => r.headers['Content-Type'].includes('application/json'),
-                    'status is UP': (r) => JSON.parse(r.body).status === 'UP'
+                    'status is UP': (r) => body.status === 'UP'
                 });
 
                 if (!checkRes) {

@@ -2,14 +2,30 @@ package middleware
 
 import (
 	"fmt"
+	"github.com/MicahParks/keyfunc/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 )
 
-func JWTMiddleware(secretKey string) gin.HandlerFunc {
+func JWTMiddleware(jwksURL string) gin.HandlerFunc {
+	jwks, err := keyfunc.Get(jwksURL, keyfunc.Options{
+		RefreshInterval: time.Hour,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create JWKS from URL: %v", err))
+	}
+
 	return func(c *gin.Context) {
+		// Skip JWT check for health endpoints
+		if strings.HasPrefix(c.Request.URL.Path, "/q/health") {
+			c.Next()
+			return
+		}
+		
 		cookieName, err := getCookieName()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -24,7 +40,7 @@ func JWTMiddleware(secretKey string) gin.HandlerFunc {
 			return
 		}
 
-		token, err := parseToken(tokenString, secretKey)
+		token, err := parseToken(tokenString, jwks)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			c.Abort()
@@ -59,13 +75,8 @@ func getTokenFromCookie(c *gin.Context, cookieName string) (string, error) {
 	return tokenString, nil
 }
 
-func parseToken(tokenString, secretKey string) (*jwt.Token, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(secretKey), nil
-	})
+func parseToken(tokenString string, jwks *keyfunc.JWKS) (*jwt.Token, error) {
+	token, err := jwt.Parse(tokenString, jwks.Keyfunc)
 	if err != nil || !token.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}

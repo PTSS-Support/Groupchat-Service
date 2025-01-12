@@ -24,7 +24,7 @@ This service will use a Azure table storage database.
    FIREBASE_CREDENTIAL_FILE=./config/firebase-credentials-dev.json
 
    # Azure Storage Configuration
-   AZURE_CONNECTION_STRING=your_connection_string
+   AZURE_GROUPCHAT_CONNECTION_STRING=your_connection_string
 
    # Application Configuration
    APP_ENV=development
