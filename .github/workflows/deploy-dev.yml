@@ -99,10 +99,6 @@ jobs:
         run: |
           docker build -t ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }} .
           docker push ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }}
-          
-      - name: verify docker image
-        run: |
-          docker pull ghcr.io/${{ steps.repo_name.outputs.name }}:${{ steps.generate_tag.outputs.version }}
 
   deploy:
     needs: package
@@ -179,14 +175,6 @@ jobs:
 
       - name: Verify Deployment
         run: |
-          # Get detailed pod information
-          echo "Pod Details:"
-          oc get pods -n ${{ vars.OSC_DEV_PROJECT }} -l app=${{ steps.app_name.outputs.name }} -o wide
-          
-          # Get pod events
-          echo "Pod Events:"
-          oc get events -n ${{ vars.OSC_DEV_PROJECT }} --sort-by='.lastTimestamp'
-    
           # Check if all pods are ready
           READY_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.status.readyReplicas}')
           DESIRED_PODS=$(oc get deployment ${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }} -o jsonpath='{.spec.replicas}')
@@ -197,36 +185,6 @@ jobs:
           fi
 
           echo "✅ Deployment verification successful: $READY_PODS/$DESIRED_PODS pods ready"
-          
-      - name: Debug Failed Deployment
-        if: failure()
-        run: |
-          echo "=== Deployment Status ==="
-          oc rollout history deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }}
-          
-          echo "=== Pod Details ==="
-          oc get pods -n ${{ vars.OSC_DEV_PROJECT }} -l app=${{ steps.app_name.outputs.name }} -o wide
-          
-          echo "=== Pod Descriptions ==="
-          for pod in $(oc get pods -n ${{ vars.OSC_DEV_PROJECT }} -l app=${{ steps.app_name.outputs.name }} -o name); do
-            echo "=== Details for $pod ==="
-            oc describe $pod -n ${{ vars.OSC_DEV_PROJECT }}
-          done
-          
-          echo "=== Pod Logs ==="
-          for pod in $(oc get pods -n ${{ vars.OSC_DEV_PROJECT }} -l app=${{ steps.app_name.outputs.name }} -o name); do
-            echo "=== Logs for $pod ==="
-            oc logs $pod -n ${{ vars.OSC_DEV_PROJECT }} --all-containers --tail=100
-          done
-          
-          echo "=== Deployment Description ==="
-          oc describe deployment/${{ steps.app_name.outputs.name }} -n ${{ vars.OSC_DEV_PROJECT }}
-          
-          echo "=== Node Status ==="
-          oc describe nodes
-          
-          echo "=== Events ==="
-          oc get events -n ${{ vars.OSC_DEV_PROJECT }} --sort-by='.lastTimestamp'
 
   test:
     needs: deploy
