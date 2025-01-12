@@ -1,6 +1,6 @@
-import { options } from './options.js';
-import healthTest from "./scripts/health-test.js";
-import { API_URL, HEADERS } from './config.js';
+import { options } from '../options.js';
+import healthTest from "../scripts/health-test.js";
+import { API_URL, HEADERS } from '../config.js';
 
 export { options };
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/spf13/viper"
+	"os"
+	"strings"
 )
 
 type Config struct {
@@ -20,7 +22,7 @@ type Config struct {
 
 	// User Service Configuration
 	UserServiceURL        string `mapstructure:"user_service_url"`
-	JWTSecretKey          string `mapstructure:"jwt_secret_key"`
+	JWKSURL               string `mapstructure:"jwks_url"`
 	AccessTokenCookieName string `mapstructure:"access_token_cookie_name"`
 }
 
@@ -36,12 +38,12 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Bind environment variables to keys
 	viper.BindEnv("firebase_credential_file", "FIREBASE_CREDENTIAL_FILE")
-	viper.BindEnv("azure_connection_string", "AZURE_GROUPCHAT_CONNECTION_STRING")
+	viper.BindEnv("azure_groupchat_connection_string", "AZURE_GROUPCHAT_CONNECTION_STRING")
 	viper.BindEnv("environment", "APP_ENV")
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
 	viper.BindEnv("user_service_url", "USER_SERVICE_URL")
-	viper.BindEnv("jwt_secret_key", "JWT_SECRET_KEY")
+	viper.BindEnv("jwks_url", "JWKS_URL")
 	viper.BindEnv("access_token_cookie_name", "ACCESS_TOKEN_COOKIE_NAME")
 
 	// Set defaults
@@ -61,6 +63,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
+
+	if strings.HasPrefix(config.FirebaseCredentialFile, ".") {
+		content, err := os.ReadFile(config.FirebaseCredentialFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading firebase credential file: %w", err)
+		}
+		config.FirebaseCredentialFile = string(content)
+	}
+
 	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
@@ -69,14 +80,17 @@ func LoadConfig(configPath string) (*Config, error) {
 }
 
 func validateConfig(config *Config) error {
+	if config.AzureConnectionString == "" {
+		return fmt.Errorf("azure_connection_string is required")
+	}
 	if config.FirebaseCredentialFile == "" {
 		return fmt.Errorf("firebase_credential_file is required")
 	}
 	if config.UserServiceURL == "" {
 		return fmt.Errorf("user_service_url is required")
 	}
-	if config.JWTSecretKey == "" {
-		return fmt.Errorf("jwt_secret_key is required")
+	if config.JWKSURL == "" {
+		return fmt.Errorf("jwks_url is required")
 	}
 	if config.AccessTokenCookieName == "" {
 		return fmt.Errorf("access_token_cookie_name is required")
