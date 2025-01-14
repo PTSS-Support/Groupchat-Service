@@ -20,12 +20,12 @@ func JWTMiddleware(jwksURL string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// Skip JWT check for health endpoints
-		if strings.HasPrefix(c.Request.URL.Path, "/q/health") {
+		// Skip JWT check for health and metrics endpoints
+		if strings.HasPrefix(c.Request.URL.Path, "/q/health") || c.Request.URL.Path == "/metrics" {
 			c.Next()
 			return
 		}
-		
+
 		cookieName, err := getCookieName()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
