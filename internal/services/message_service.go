@@ -8,7 +8,6 @@ import (
 	"Groupchat-Service/internal/database/repositories"
 	"Groupchat-Service/internal/models"
 	"github.com/google/uuid"
-	"github.com/microcosm-cc/bluemonday"
 )
 
 type messageService struct {
@@ -39,23 +38,9 @@ func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, que
 		return nil, nil, fmt.Errorf("error getting messages from repository: %w", err)
 	}
 
-	// Fetch group members names asynchronously
-	groupMembersChan := make(chan []models.UserSummary)
-	errChan := make(chan error)
-	go func() {
-		groupMembers, err := s.validationService.FetchGroupMembers(ctx, groupID)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		groupMembersChan <- groupMembers
-	}()
-
-	// Wait for group members to be fetched
-	var groupMembers []models.UserSummary
-	select {
-	case groupMembers = <-groupMembersChan:
-	case err = <-errChan:
+	// Fetch group members to get their usernames
+	groupMembers, err := s.validationService.FetchGroupMembers(ctx, groupID)
+	if err != nil {
 		return nil, nil, fmt.Errorf("error fetching group members: %w", err)
 	}
 
@@ -87,16 +72,12 @@ func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, que
 }
 
 func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, userName string, create models.MessageCreate) (*models.Message, error) {
-	// Sanitize message content
-	p := bluemonday.UGCPolicy()
-	sanitizedContent := p.Sanitize(create.Content)
-
 	// Create message entity
 	message := &models.Message{
 		ID:       uuid.New(),
 		GroupID:  groupID,
 		SenderID: userID,
-		Content:  sanitizedContent,
+		Content:  create.Content,
 		SentAt:   time.Now().UTC(),
 		IsPinned: false,
 	}
@@ -106,28 +87,26 @@ func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, u
 		return nil, fmt.Errorf("error creating message: %w", err)
 	}
 
-	// Get FCM tokens for group members asynchronously
-	go func() {
-		tokens, err := s.fcmTokenRepo.GetGroupMemberTokens(ctx, groupID)
-		if err != nil {
-			// Log error but don't fail the message creation
-			fmt.Printf("Error getting FCM tokens: %v\n", err)
-			return
-		}
+	// Get FCM tokens for group members
+	tokens, err := s.fcmTokenRepo.GetGroupMemberTokens(ctx, groupID)
+	if err != nil {
+		// Log error but don't fail the message creation
+		fmt.Printf("Error getting FCM tokens: %v\n", err)
+		return message, nil
+	}
 
-		// Send notification asynchronously
-		go func() {
-			_, err := s.notificationService.SendGroupMessage(Message{
-				SenderID:   message.SenderID.String(),
-				SenderName: userName,
-				Content:    message.Content,
-				GroupID:    message.GroupID.String(),
-				Timestamp:  message.SentAt.Unix(),
-			}, tokens)
-			if err != nil {
-				fmt.Printf("Error sending notification: %v\n", err)
-			}
-		}()
+	// Send notification in a goroutine
+	go func() {
+		_, err := s.notificationService.SendGroupMessage(Message{
+			SenderID:   message.SenderID.String(),
+			SenderName: userName,
+			Content:    message.Content,
+			GroupID:    message.GroupID.String(),
+			Timestamp:  message.SentAt.Unix(),
+		}, tokens)
+		if err != nil {
+			fmt.Printf("Error sending notification: %v\n", err)
+		}
 	}()
 
 	return message, nil
