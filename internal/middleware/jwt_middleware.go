@@ -91,7 +91,6 @@ func (config *JWTMiddlewareConfig) handleRequest(c *gin.Context) {
 func parseJWKS(jwksJSON string) (*rsa.PublicKey, error) {
 	var jwks JWKS
 	if err := json.Unmarshal([]byte(jwksJSON), &jwks); err != nil {
-		fmt.Printf("Raw JWKS JSON: %s\n", jwksJSON)
 		return nil, fmt.Errorf("failed to parse JWKS JSON: %v", err)
 	}
 
