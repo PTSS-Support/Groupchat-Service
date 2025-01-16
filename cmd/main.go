@@ -79,13 +79,17 @@ func main() {
 	router.Use(middleware.PrometheusMiddleware())
 
 	// Add JWT middleware
-	router.Use(middleware.JWTMiddleware(cfg.JWKSURL))
+	jwtMiddleware, err := middleware.NewJWTMiddleware(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize JWT middleware: %v", err)
+	}
+	router.Use(jwtMiddleware)
 
 	// Register routes
 	messageController.RegisterRoutes(router)
 	fcmTokenController.RegisterRoutes(router)
 	healthController.RegisterRoutes(router)
-	
+
 	middleware.RegisterMetricsEndpoint(router)
 
 	// Get the path to the serviceAccountKey.json file
