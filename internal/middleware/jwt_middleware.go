@@ -18,12 +18,7 @@ type JWTMiddlewareConfig struct {
 }
 
 func NewJWTMiddleware(cfg *config.Config) (gin.HandlerFunc, error) {
-	certPEM := cfg.PublicKey
-	if certPEM == "" {
-		return nil, fmt.Errorf("public key certificate is required")
-	}
-
-	publicKey, err := parsePublicKey(certPEM)
+	publicKey, err := parseRawPublicKey(cfg.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
@@ -35,23 +30,26 @@ func NewJWTMiddleware(cfg *config.Config) (gin.HandlerFunc, error) {
 	return middlewareConfig.handleRequest, nil
 }
 
-func parsePublicKey(certPEM string) (*rsa.PublicKey, error) {
-	certData, err := base64.StdEncoding.DecodeString(certPEM)
+func parseRawPublicKey(rawKey string) (*rsa.PublicKey, error) {
+	// Decode the base64-encoded key
+	derKey, err := base64.StdEncoding.DecodeString(rawKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode certificate: %v", err)
+		return nil, fmt.Errorf("failed to decode base64 public key: %v", err)
 	}
 
-	cert, err := x509.ParseCertificate(certData)
+	// Parse the DER-encoded key
+	pub, err := x509.ParsePKIXPublicKey(derKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse certificate: %v", err)
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
 
-	publicKey, ok := cert.PublicKey.(*rsa.PublicKey)
+	// Ensure it's an RSA public key
+	rsaPub, ok := pub.(*rsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("not an RSA public key")
 	}
 
-	return publicKey, nil
+	return rsaPub, nil
 }
 
 func (config *JWTMiddlewareConfig) handleRequest(c *gin.Context) {
