@@ -131,12 +131,20 @@ func TestCreateMessage(t *testing.T) {
 	})
 
 	t.Run("Invalid request body", func(t *testing.T) {
-		controller, _, _ := setupMessageController()
+		controller, _, mockValidation := setupMessageController()
 		w := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(w)
 
+		groupID := uuid.New()
+		userID := uuid.New()
+		ctx.Set("groupID", groupID.String())
+		ctx.Set("userID", userID.String())
+
 		ctx.Request = httptest.NewRequest("POST", "/", bytes.NewBuffer([]byte("invalid json")))
 		ctx.Request.Header.Set("Content-Type", "application/json")
+
+		mockValidation.On("FetchUserName", mock.Anything).
+			Return("", nil)
 
 		controller.CreateMessage(ctx)
 
@@ -178,6 +186,8 @@ func TestToggleMessagePin(t *testing.T) {
 		w := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(w)
 
+		ctx.Set("groupID", uuid.New().String())
+		ctx.Set("userID", uuid.New().String())
 		ctx.AddParam("messageId", "invalid-uuid")
 		ctx.Request = httptest.NewRequest("PUT", "/", nil)
 

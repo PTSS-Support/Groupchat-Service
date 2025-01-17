@@ -34,8 +34,8 @@ type mockValidationService struct {
 	mock.Mock
 }
 
-func (m *mockValidationService) ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error) {
-	args := m.Called(ctx, queryParams)
+func (m *mockValidationService) ValidatePaginationQuery(queryParams map[string]string) (models.PaginationQuery, error) {
+	args := m.Called(queryParams)
 	return args.Get(0).(models.PaginationQuery), args.Error(1)
 }
 

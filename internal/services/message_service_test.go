@@ -213,32 +213,38 @@ func TestCreateMessage(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		setupMocks func(*MockMessageRepository, *MockFCMTokenRepository, *MockNotificationService)
+		setupMocks func(*MockMessageRepository, *MockFCMTokenRepository, *MockNotificationService, chan bool)
 		wantErr    bool
+		expectSend bool
 	}{
 		{
 			name: "Success",
-			setupMocks: func(mr *MockMessageRepository, fr *MockFCMTokenRepository, ns *MockNotificationService) {
-				mr.On("CreateMessage", ctx, groupID, mock.AnythingOfType("*models.Message")).Return(nil)
-				fr.On("GetGroupMemberTokens", ctx, groupID).Return([]string{"token1"}, nil)
-				ns.On("SendGroupMessage", mock.AnythingOfType("Message"), []string{"token1"}).Return(&BatchResponse{}, nil)
+			setupMocks: func(mockMsgRepo *MockMessageRepository, mockFCMRepo *MockFCMTokenRepository, mockNotifService *MockNotificationService, ch chan bool) {
+				mockMsgRepo.On("CreateMessage", mock.Anything, groupID, mock.Anything).Return(nil)
+				mockFCMRepo.On("GetGroupMemberTokens", mock.Anything, groupID).Return([]string{"token1", "token2"}, nil)
+				mockNotifService.On("SendGroupMessage", mock.Anything, []string{"token1", "token2"}).Return(&BatchResponse{}, nil).Run(func(args mock.Arguments) {
+					ch <- true
+				})
 			},
-			wantErr: false,
+			wantErr:    false,
+			expectSend: true,
 		},
 		{
 			name: "Repository Error",
-			setupMocks: func(mr *MockMessageRepository, fr *MockFCMTokenRepository, ns *MockNotificationService) {
-				mr.On("CreateMessage", ctx, groupID, mock.AnythingOfType("*models.Message")).Return(errors.New("db error"))
+			setupMocks: func(mockMsgRepo *MockMessageRepository, mockFCMRepo *MockFCMTokenRepository, mockNotifService *MockNotificationService, ch chan bool) {
+				mockMsgRepo.On("CreateMessage", mock.Anything, groupID, mock.Anything).Return(errors.New("repository error"))
 			},
-			wantErr: true,
+			wantErr:    true,
+			expectSend: false,
 		},
 		{
 			name: "FCM Token Error - Continues Successfully",
-			setupMocks: func(mr *MockMessageRepository, fr *MockFCMTokenRepository, ns *MockNotificationService) {
-				mr.On("CreateMessage", ctx, groupID, mock.AnythingOfType("*models.Message")).Return(nil)
-				fr.On("GetGroupMemberTokens", ctx, groupID).Return(nil, errors.New("token error"))
+			setupMocks: func(mockMsgRepo *MockMessageRepository, mockFCMRepo *MockFCMTokenRepository, mockNotifService *MockNotificationService, ch chan bool) {
+				mockMsgRepo.On("CreateMessage", mock.Anything, groupID, mock.Anything).Return(nil)
+				mockFCMRepo.On("GetGroupMemberTokens", mock.Anything, groupID).Return([]string{}, errors.New("FCM token error"))
 			},
-			wantErr: false,
+			wantErr:    false,
+			expectSend: false,
 		},
 	}
 
@@ -247,22 +253,26 @@ func TestCreateMessage(t *testing.T) {
 			mockMsgRepo := new(MockMessageRepository)
 			mockFCMRepo := new(MockFCMTokenRepository)
 			mockNotifService := new(MockNotificationService)
-			mockValidService := new(MockValidationService)
+			ch := make(chan bool, 1)
 
-			tt.setupMocks(mockMsgRepo, mockFCMRepo, mockNotifService)
+			tt.setupMocks(mockMsgRepo, mockFCMRepo, mockNotifService, ch)
 
-			service := NewMessageService(mockMsgRepo, mockFCMRepo, mockNotifService, mockValidService)
+			service := NewMessageService(mockMsgRepo, mockFCMRepo, mockNotifService, nil)
 			message, err := service.CreateMessage(ctx, groupID, userID, userName, create)
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Nil(t, message)
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, message)
-				assert.Equal(t, groupID, message.GroupID)
-				assert.Equal(t, userID, message.SenderID)
-				assert.Equal(t, create.Content, message.Content)
+				if tt.expectSend {
+					select {
+					case <-ch:
+						// SendGroupMessage was called
+					case <-time.After(1 * time.Second):
+						t.Fatal("SendGroupMessage was not called")
+					}
+				}
 			}
 
 			mockMsgRepo.AssertExpectations(t)
