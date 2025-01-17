@@ -51,7 +51,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux go build -o ../build/main .
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.repo_name.outputs.artifact_name }}
           path: build/
@@ -74,7 +74,7 @@ jobs:
           echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Download Build Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: build/
