@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 )
 
 const (
@@ -28,7 +29,7 @@ func NewValidationService(userServiceURL string) ValidationService {
 	return &validationService{userServiceURL: userServiceURL}
 }
 
-func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error) {
+func (v *validationService) ValidatePaginationQuery(queryParams map[string]string) (models.PaginationQuery, error) {
 	query := models.PaginationQuery{
 		PageSize:  DefaultPageSize,
 		Direction: models.Next,
@@ -37,7 +38,7 @@ func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryPa
 	if size, ok := queryParams["pageSize"]; ok {
 		pageSize, err := strconv.Atoi(size)
 		if err != nil || pageSize < MinPageSize || pageSize > MaxPageSize {
-			return query, errors.New("page size must be between 1 and 50")
+			return query, fmt.Errorf("page size must be between %d and %d", MinPageSize, MaxPageSize)
 		}
 		query.PageSize = pageSize
 	}
@@ -47,15 +48,15 @@ func (v *validationService) ValidatePaginationQuery(ctx context.Context, queryPa
 	}
 
 	if direction, ok := queryParams["direction"]; ok {
-		if direction != "next" && direction != "previous" {
-			return query, errors.New("direction must be 'next' or 'previous'")
+		if direction != string(models.Next) && direction != string(models.Previous) {
+			return query, fmt.Errorf("direction must be '%s' or '%s'", models.Next, models.Previous)
 		}
 		query.Direction = models.Direction(direction)
 	}
 
 	if search, ok := queryParams["search"]; ok {
-		if len(search) > MaxSearchLength {
-			return query, errors.New("search term too long: maximum 100 characters")
+		if utf8.RuneCountInString(search) > MaxSearchLength {
+			return query, fmt.Errorf("search term too long: maximum %d characters", MaxSearchLength)
 		}
 		query.Search = &search
 	}
@@ -135,10 +136,6 @@ func (v *validationService) FetchUserName(ctx context.Context) (string, error) {
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("failed to unmarshal response: %w", err)
 	}
-
-	// Mock username as the user service does not provide it yet TODO: remove this once user service is updated
-	result.FirstName = "John"
-	result.LastName = "Doe"
 
 	return fmt.Sprintf("%s %s", result.FirstName, result.LastName), nil
 }

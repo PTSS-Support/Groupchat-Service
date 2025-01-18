@@ -17,7 +17,7 @@ type NotificationService interface {
 }
 
 type ValidationService interface {
-	ValidatePaginationQuery(ctx context.Context, queryParams map[string]string) (models.PaginationQuery, error)
+	ValidatePaginationQuery(queryParams map[string]string) (models.PaginationQuery, error)
 	ValidateUserContext(ctx context.Context) (uuid.UUID, string, error)
 	ValidateGroupID(groupID string) (uuid.UUID, error)
 	ValidateUserID(userID string) (uuid.UUID, error)
