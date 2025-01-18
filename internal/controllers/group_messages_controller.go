@@ -42,7 +42,7 @@ func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
 		"search":    ctx.Query("search"),
 	}
 
-	query, err := c.validationService.ValidatePaginationQuery(ctx.Request.Context(), queryParams)
+	query, err := c.validationService.ValidatePaginationQuery(queryParams)
 	if err != nil {
 		respondWithError(ctx, http.StatusBadRequest, err.Error())
 		return
