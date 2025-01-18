@@ -22,7 +22,7 @@ func getGroupIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
 	return parsedGroupID, nil
 }
 
-// getUserFromContext extracts the user ID from the context
+// getUserIDFromContext extracts the user ID from the context
 func getUserIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
 	userID, ok := ctx.Get("userID")
 	if !ok {
