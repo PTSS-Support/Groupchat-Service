@@ -43,7 +43,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
 	viper.BindEnv("user_service_url", "USER_SERVICE_URL")
-	viper.BindEnv("public_key", "KEYCLOAK_PUBLIC_KEY")
+	viper.BindEnv("keycloak_public_key", "KEYCLOAK_PUBLIC_KEY")
 	viper.BindEnv("access_token_cookie_name", "ACCESS_TOKEN_COOKIE_NAME")
 
 	// Set defaults
