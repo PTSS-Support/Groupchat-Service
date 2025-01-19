@@ -111,14 +111,14 @@ func validateTokenClaims(token *jwt.Token) (string, string, error) {
 		return "", "", fmt.Errorf("invalid token claims")
 	}
 
-	userID, ok := claims["sub"].(string)
-	if !ok || userID == "" {
-		return "", "", fmt.Errorf("user ID claim missing")
+	userID, ok := claims["user_id"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("user ID not found in token")
 	}
 
-	groupID, ok := claims["groupId"].(string)
-	if !ok || groupID == "" {
-		return "", "", fmt.Errorf("group ID claim missing")
+	groupID, ok := claims["group_id"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("group ID not found in token")
 	}
 
 	return userID, groupID, nil
