@@ -48,14 +48,14 @@ func (s *healthService) CheckHealth(ctx context.Context) (*models.HealthResponse
 }
 
 func (s *healthService) CheckReadiness(ctx context.Context) (*models.HealthResponse, error) {
-	keycloakHealth, err := s.healthRepo.CheckHealth(ctx)
+	userServiceHealth, err := s.healthRepo.CheckHealth(ctx)
 
 	if err != nil {
 		return &models.HealthResponse{
 			Status: models.StatusDown,
 			Checks: []models.Check{
 				{
-					Name:   "Keycloak health check",
+					Name:   "User service health check",
 					Status: models.StatusDown,
 					Data: map[string]interface{}{
 						"error": err.Error(),
@@ -69,10 +69,10 @@ func (s *healthService) CheckReadiness(ctx context.Context) (*models.HealthRespo
 		Status: models.StatusUp,
 		Checks: []models.Check{
 			{
-				Name:   "Keycloak health check",
+				Name:   "User service health check",
 				Status: models.StatusUp,
 				Data: map[string]interface{}{
-					"response": keycloakHealth,
+					"response": userServiceHealth,
 				},
 			},
 		},
