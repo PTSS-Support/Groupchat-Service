@@ -1,70 +1,100 @@
 package middleware
 
 import (
+	"Groupchat-Service/internal/config"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
-	"github.com/MicahParks/keyfunc/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 )
 
-func JWTMiddleware(jwksURL string) gin.HandlerFunc {
-	jwks, err := keyfunc.Get(jwksURL, keyfunc.Options{
-		RefreshInterval: time.Hour,
-	})
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create JWKS from URL: %v", err))
-	}
-
-	return func(c *gin.Context) {
-		// Skip JWT check for health and metrics endpoints
-		if strings.HasPrefix(c.Request.URL.Path, "/q/health") || c.Request.URL.Path == "/metrics" {
-			c.Next()
-			return
-		}
-
-		cookieName, err := getCookieName()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			c.Abort()
-			return
-		}
-
-		tokenString, err := getTokenFromCookie(c, cookieName)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			c.Abort()
-			return
-		}
-
-		token, err := parseToken(tokenString, jwks)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			c.Abort()
-			return
-		}
-
-		userID, groupID, err := validateTokenClaims(token)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			c.Abort()
-			return
-		}
-
-		setContextValues(c, userID, groupID)
-		c.Next()
-	}
+type JWTMiddlewareConfig struct {
+	rsaPublicKey *rsa.PublicKey
+	cookieName   string
 }
 
-func getCookieName() (string, error) {
-	cookieName := os.Getenv("ACCESS_TOKEN_COOKIE_NAME")
-	if cookieName == "" {
-		return "", fmt.Errorf("ACCESS_TOKEN_COOKIE_NAME not set")
+func NewJWTMiddleware(cfg *config.Config) (gin.HandlerFunc, error) {
+	publicKey, err := parseRawPublicKey(cfg.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
-	return cookieName, nil
+
+	middlewareConfig := &JWTMiddlewareConfig{
+		rsaPublicKey: publicKey,
+		cookieName:   cfg.AccessTokenCookieName,
+	}
+	return middlewareConfig.handleRequest, nil
+}
+
+func parseRawPublicKey(rawKey string) (*rsa.PublicKey, error) {
+	// Decode the base64-encoded key
+	derKey, err := base64.StdEncoding.DecodeString(rawKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 public key: %v", err)
+	}
+
+	// Parse the DER-encoded key
+	pub, err := x509.ParsePKIXPublicKey(derKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
+	}
+
+	// Ensure it's an RSA public key
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an RSA public key")
+	}
+
+	return rsaPub, nil
+}
+
+func (config *JWTMiddlewareConfig) handleRequest(c *gin.Context) {
+	if strings.HasPrefix(c.Request.URL.Path, "/q/health") || c.Request.URL.Path == "/metrics" {
+		c.Next()
+		return
+	}
+
+	tokenString, err := getTokenFromCookie(c, config.cookieName)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Abort()
+		return
+	}
+
+	token, err := config.parseToken(tokenString)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Abort()
+		return
+	}
+
+	userID, groupID, err := validateTokenClaims(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Abort()
+		return
+	}
+
+	setContextValues(c, userID, groupID)
+	c.Next()
+}
+
+func (config *JWTMiddlewareConfig) parseToken(tokenString string) (*jwt.Token, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return config.rsaPublicKey, nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	return token, nil
 }
 
 func getTokenFromCookie(c *gin.Context, cookieName string) (string, error) {
@@ -75,26 +105,18 @@ func getTokenFromCookie(c *gin.Context, cookieName string) (string, error) {
 	return tokenString, nil
 }
 
-func parseToken(tokenString string, jwks *keyfunc.JWKS) (*jwt.Token, error) {
-	token, err := jwt.Parse(tokenString, jwks.Keyfunc)
-	if err != nil || !token.Valid {
-		return nil, fmt.Errorf("invalid token")
-	}
-	return token, nil
-}
-
 func validateTokenClaims(token *jwt.Token) (string, string, error) {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
 		return "", "", fmt.Errorf("invalid token claims")
 	}
 
-	userID, ok := claims["userID"].(string)
+	userID, ok := claims["user_id"].(string)
 	if !ok {
 		return "", "", fmt.Errorf("user ID not found in token")
 	}
 
-	groupID, ok := claims["groupID"].(string)
+	groupID, ok := claims["group_id"].(string)
 	if !ok {
 		return "", "", fmt.Errorf("group ID not found in token")
 	}
