@@ -39,6 +39,11 @@ func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, que
 		return nil, nil, fmt.Errorf("error getting messages from repository: %w", err)
 	}
 
+	// If no messages are found, return an empty list and pagination response
+	if len(messages) == 0 {
+		return []models.MessageResponse{}, pagination, nil
+	}
+
 	// Fetch group members asynchronously
 	groupMembersChan := make(chan []models.UserSummary)
 	errChan := make(chan error)
