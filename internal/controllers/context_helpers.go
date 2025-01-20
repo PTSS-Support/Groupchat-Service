@@ -2,19 +2,18 @@ package controllers
 
 import (
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 // getGroupIDFromContext extracts the group ID from the context
 func getGroupIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
-	groupID, ok := ctx.Get("groupID")
-	if !ok {
+	groupID, exists := ctx.Get("groupID")
+	if !exists {
 		return uuid.Nil, errors.New("group ID not found in context")
 	}
 
-	parsedGroupID, err := uuid.Parse(fmt.Sprintf("%v", groupID))
+	parsedGroupID, err := uuid.Parse(groupID.(string))
 	if err != nil {
 		return uuid.Nil, errors.New("invalid group ID")
 	}
@@ -24,12 +23,12 @@ func getGroupIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
 
 // getUserIDFromContext extracts the user ID from the context
 func getUserIDFromContext(ctx *gin.Context) (uuid.UUID, error) {
-	userID, ok := ctx.Get("userID")
-	if !ok {
+	userID, exists := ctx.Get("userID")
+	if !exists {
 		return uuid.Nil, errors.New("user ID not found in context")
 	}
 
-	parsedUserID, err := uuid.Parse(fmt.Sprintf("%v", userID))
+	parsedUserID, err := uuid.Parse(userID.(string))
 	if err != nil {
 		return uuid.Nil, errors.New("invalid user ID")
 	}
