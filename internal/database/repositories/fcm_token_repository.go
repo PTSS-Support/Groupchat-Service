@@ -77,13 +77,21 @@ func (r *FcmTokenRepository) GetGroupMemberTokens(ctx context.Context, groupID u
 	return tokens, nil
 }
 
+type AzureTableEntity struct {
+	PartitionKey string `json:"PartitionKey"`
+	RowKey       string `json:"RowKey"`
+	Token        string `json:"Token"`
+	IsActive     bool   `json:"IsActive"`
+	Timestamp    string `json:"Timestamp"`
+}
+
 func (r *FcmTokenRepository) SaveToken(ctx context.Context, groupID uuid.UUID, userID uuid.UUID, token string) error {
-	entity := models.FCMToken{
+	entity := AzureTableEntity{
 		PartitionKey: groupID.String(),
 		RowKey:       userID.String(),
 		Token:        token,
 		IsActive:     true,
-		Timestamp:    timestamppb.New(time.Now().UTC()),
+		Timestamp:    time.Now().UTC().Format(time.RFC3339),
 	}
 
 	marshaled, err := json.Marshal(entity)
@@ -91,9 +99,11 @@ func (r *FcmTokenRepository) SaveToken(ctx context.Context, groupID uuid.UUID, u
 		return fmt.Errorf("failed to marshal entity: %w", err)
 	}
 
-	_, err = r.table.AddEntity(ctx, marshaled, nil)
+	_, err = r.table.UpsertEntity(ctx, marshaled, &aztables.UpsertEntityOptions{
+		UpdateMode: aztables.UpdateModeReplace,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to save token: %w", err)
+		return fmt.Errorf("failed to save token (upsert): %w", err)
 	}
 
 	return nil
