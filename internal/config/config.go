@@ -22,7 +22,7 @@ type Config struct {
 
 	// User Service Configuration
 	UserServiceURL        string `mapstructure:"user_service_url"`
-	JWKSURL               string `mapstructure:"jwks_url"`
+	PublicKey             string `mapstructure:"keycloak_public_key"`
 	AccessTokenCookieName string `mapstructure:"access_token_cookie_name"`
 }
 
@@ -43,7 +43,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.BindEnv("port", "APP_PORT")
 	viper.BindEnv("debug", "DEBUG")
 	viper.BindEnv("user_service_url", "USER_SERVICE_URL")
-	viper.BindEnv("jwks_url", "JWKS_URL")
+	viper.BindEnv("keycloak_public_key", "KEYCLOAK_PUBLIC_KEY")
 	viper.BindEnv("access_token_cookie_name", "ACCESS_TOKEN_COOKIE_NAME")
 
 	// Set defaults
@@ -89,8 +89,8 @@ func validateConfig(config *Config) error {
 	if config.UserServiceURL == "" {
 		return fmt.Errorf("user_service_url is required")
 	}
-	if config.JWKSURL == "" {
-		return fmt.Errorf("jwks_url is required")
+	if config.PublicKey == "" {
+		return fmt.Errorf("keycloak_public_key is required")
 	}
 	if config.AccessTokenCookieName == "" {
 		return fmt.Errorf("access_token_cookie_name is required")

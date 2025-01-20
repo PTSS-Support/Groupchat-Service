@@ -11,10 +11,10 @@ replicaCount: 1
 
 resources:
   limits:
-    cpu: 200m
+    cpu: 80m
     memory: 256Mi
   requests:
-    cpu: 100m
+    cpu: 30m
     memory: 128Mi
 
 ports:

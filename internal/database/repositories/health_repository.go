@@ -26,7 +26,7 @@ func NewHealthRepository(baseURL string, loggerFactory util.LoggerFactory) Healt
 
 func (r *healthRepository) CheckHealth(ctx context.Context) (*models.HealthResponse, error) {
 	log := r.logger.WithContext(ctx)
-	healthURL := fmt.Sprintf("%s/health/ready", r.baseURL)
+	healthURL := fmt.Sprintf("%s/q/health/ready", r.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {

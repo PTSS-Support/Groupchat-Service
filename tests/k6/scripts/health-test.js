@@ -19,8 +19,8 @@ export default function (data) {
                     'response is JSON': (r) => r.headers['Content-Type'].includes('application/json'),
                     'status is UP': (r) => body.status === 'UP',
                     'checks array exists': (r) => Array.isArray(checks),
-                    'keycloak check exists': (r) => checks.some(check =>
-                        check.name === 'Keycloak health check' && check.status === 'UP'
+                    'user service check exists': (r) => checks.some(check =>
+                        check.name === 'User service health check' && check.status === 'UP'
                     )
                 });
 
