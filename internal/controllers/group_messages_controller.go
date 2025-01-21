@@ -23,9 +23,9 @@ func NewMessageController(messageService services.MessageService, validationServ
 }
 
 func (c *FCMMessageController) RegisterRoutes(router *gin.Engine) {
-	router.GET("/groups/:groupId/messages", c.GetMessages)
-	router.POST("/groups/:groupId/messages", c.CreateMessage)
-	router.PUT("/groups/:groupId/messages/:messageId/pin", c.ToggleMessagePin)
+	router.GET("/groups/messages", c.GetMessages)
+	router.POST("/groups/messages", c.CreateMessage)
+	router.PUT("/groups/messages/:messageId/pin", c.ToggleMessagePin)
 }
 
 func (c *FCMMessageController) GetMessages(ctx *gin.Context) {

@@ -16,8 +16,8 @@ func NewFCMTokenController(service services.FCMTokenService, validationService s
 }
 
 func (c *fcmTokenController) RegisterRoutes(router *gin.Engine) {
-	router.POST("/groups/:groupId/users/:userId/tokens", c.SaveToken)
-	router.DELETE("/groups/:groupId/users/:userId/tokens", c.DeleteToken)
+	router.POST("/groups/users/tokens", c.SaveToken)
+	router.DELETE("/groups/users/tokens", c.DeleteToken)
 }
 
 func (c *fcmTokenController) SaveToken(ctx *gin.Context) {
