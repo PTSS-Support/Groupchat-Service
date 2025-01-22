@@ -72,14 +72,14 @@ func (config *JWTMiddlewareConfig) handleRequest(c *gin.Context) {
 		return
 	}
 
-	userID, groupID, err := validateTokenClaims(token)
+	userID, groupID, claims, err := validateTokenClaims(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		c.Abort()
 		return
 	}
 
-	setContextValues(c, userID, groupID)
+	setContextValues(c, userID, groupID, claims)
 	c.Next()
 }
 
@@ -105,26 +105,27 @@ func getTokenFromCookie(c *gin.Context, cookieName string) (string, error) {
 	return tokenString, nil
 }
 
-func validateTokenClaims(token *jwt.Token) (string, string, error) {
+func validateTokenClaims(token *jwt.Token) (string, string, jwt.MapClaims, error) {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return "", "", fmt.Errorf("invalid token claims")
+		return "", "", nil, fmt.Errorf("invalid token claims")
 	}
 
 	userID, ok := claims["user_id"].(string)
 	if !ok {
-		return "", "", fmt.Errorf("user ID not found in token")
+		return "", "", nil, fmt.Errorf("user ID not found in token")
 	}
 
 	groupID, ok := claims["group_id"].(string)
 	if !ok {
-		return "", "", fmt.Errorf("group ID not found in token")
+		return "", "", nil, fmt.Errorf("group ID not found in token")
 	}
 
-	return userID, groupID, nil
+	return userID, groupID, claims, nil
 }
 
-func setContextValues(c *gin.Context, userID, groupID string) {
+func setContextValues(c *gin.Context, userID, groupID string, claims jwt.MapClaims) {
 	c.Set("userID", userID)
 	c.Set("groupID", groupID)
+	c.Set("claims", claims)
 }
