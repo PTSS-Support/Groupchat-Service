@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -35,30 +36,29 @@ func (v *validationService) ValidatePaginationQuery(queryParams map[string]strin
 		Direction: models.Next,
 	}
 
-	if size, ok := queryParams["pageSize"]; ok {
-		pageSize, err := strconv.Atoi(size)
-		if err != nil || pageSize < MinPageSize || pageSize > MaxPageSize {
-			return query, fmt.Errorf("page size must be between %d and %d", MinPageSize, MaxPageSize)
+	for key, value := range queryParams {
+		lowerKey := strings.ToLower(key)
+		switch lowerKey {
+		case "pagesize":
+			pageSize, err := strconv.Atoi(value)
+			if err != nil || pageSize < MinPageSize || pageSize > MaxPageSize {
+				return query, fmt.Errorf("page size must be between %d and %d", MinPageSize, MaxPageSize)
+			}
+			query.PageSize = pageSize
+		case "cursor":
+			query.Cursor = &value
+		case "direction":
+			lowerValue := strings.ToLower(value)
+			if lowerValue != string(models.Next) && lowerValue != string(models.Previous) {
+				return query, fmt.Errorf("direction must be '%s' or '%s'", models.Next, models.Previous)
+			}
+			query.Direction = models.Direction(lowerValue)
+		case "search":
+			if utf8.RuneCountInString(value) > MaxSearchLength {
+				return query, fmt.Errorf("search term too long: maximum %d characters", MaxSearchLength)
+			}
+			query.Search = &value
 		}
-		query.PageSize = pageSize
-	}
-
-	if cursor, ok := queryParams["cursor"]; ok {
-		query.Cursor = &cursor
-	}
-
-	if direction, ok := queryParams["direction"]; ok {
-		if direction != string(models.Next) && direction != string(models.Previous) {
-			return query, fmt.Errorf("direction must be '%s' or '%s'", models.Next, models.Previous)
-		}
-		query.Direction = models.Direction(direction)
-	}
-
-	if search, ok := queryParams["search"]; ok {
-		if utf8.RuneCountInString(search) > MaxSearchLength {
-			return query, fmt.Errorf("search term too long: maximum %d characters", MaxSearchLength)
-		}
-		query.Search = &search
 	}
 
 	return query, nil
