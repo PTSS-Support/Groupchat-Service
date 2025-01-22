@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"Groupchat-Service/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"net/http"
 
@@ -23,9 +24,17 @@ func NewMessageController(messageService services.MessageService, validationServ
 }
 
 func (c *FCMMessageController) RegisterRoutes(router *gin.Engine) {
-	router.GET("/groups/messages", c.GetMessages)
-	router.POST("/groups/messages", c.CreateMessage)
-	router.PUT("/groups/messages/:messageId/pin", c.ToggleMessagePin)
+	router.GET("/groups/messages",
+		middleware.RequireRoles(models.RolePatient, models.RolePrimaryCaregiver, models.RoleFamilyMember),
+		c.GetMessages)
+
+	router.POST("/groups/messages",
+		middleware.RequireRoles(models.RolePatient, models.RolePrimaryCaregiver, models.RoleFamilyMember),
+		c.CreateMessage)
+
+	router.PUT("/groups/messages/:messageId/pin",
+		middleware.RequireRoles(models.RolePatient, models.RolePrimaryCaregiver, models.RoleFamilyMember),
+		c.ToggleMessagePin)
 }
 
 func (c *FCMMessageController) GetMessages(ctx *gin.Context) {
