@@ -72,14 +72,14 @@ func (config *JWTMiddlewareConfig) handleRequest(c *gin.Context) {
 		return
 	}
 
-	userID, groupID, claims, err := validateTokenClaims(token)
+	userID, groupID, firstName, lastName, claims, err := validateTokenClaims(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		c.Abort()
 		return
 	}
 
-	setContextValues(c, userID, groupID, claims)
+	setContextValues(c, userID, groupID, firstName, lastName, claims)
 	c.Next()
 }
 
@@ -104,28 +104,39 @@ func getTokenFromCookie(c *gin.Context, cookieName string) (string, error) {
 	}
 	return tokenString, nil
 }
-
-func validateTokenClaims(token *jwt.Token) (string, string, jwt.MapClaims, error) {
+func validateTokenClaims(token *jwt.Token) (string, string, string, string, jwt.MapClaims, error) {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return "", "", nil, fmt.Errorf("invalid token claims")
+		return "", "", "", "", nil, fmt.Errorf("invalid token claims")
 	}
 
 	userID, ok := claims["user_id"].(string)
 	if !ok {
-		return "", "", nil, fmt.Errorf("user ID not found in token")
+		return "", "", "", "", nil, fmt.Errorf("user ID not found in token")
 	}
 
 	groupID, ok := claims["group_id"].(string)
 	if !ok {
-		return "", "", nil, fmt.Errorf("group ID not found in token")
+		return "", "", "", "", nil, fmt.Errorf("group ID not found in token")
 	}
 
-	return userID, groupID, claims, nil
+	firstName, ok := claims["first_name"].(string)
+	if !ok {
+		return "", "", "", "", nil, fmt.Errorf("first name not found in token")
+	}
+
+	lastName, ok := claims["last_name"].(string)
+	if !ok {
+		return "", "", "", "", nil, fmt.Errorf("last name not found in token")
+	}
+
+	return userID, groupID, firstName, lastName, claims, nil
 }
 
-func setContextValues(c *gin.Context, userID, groupID string, claims jwt.MapClaims) {
+func setContextValues(c *gin.Context, userID, groupID, firstName, lastName string, claims jwt.MapClaims) {
 	c.Set("userID", userID)
 	c.Set("groupID", groupID)
+	c.Set("firstName", firstName)
+	c.Set("lastName", lastName)
 	c.Set("claims", claims)
 }

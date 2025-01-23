@@ -2,11 +2,7 @@ package services
 
 import (
 	"Groupchat-Service/internal/models"
-	"context"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -74,133 +70,6 @@ func TestValidatePaginationQuery(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, query)
-			}
-		})
-	}
-}
-
-func TestFetchUserName(t *testing.T) {
-	tests := []struct {
-		name       string
-		setupMock  func() *httptest.Server
-		expectName string
-		expectErr  bool
-	}{
-		{
-			name: "Success",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"firstName": "John", "lastName": "Doe"}`))
-				})
-				return httptest.NewServer(handler)
-			},
-			expectName: "John Doe",
-			expectErr:  false,
-		},
-		{
-			name: "Non-200 status code",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusInternalServerError)
-				})
-				return httptest.NewServer(handler)
-			},
-			expectName: "",
-			expectErr:  true,
-		},
-		{
-			name: "Invalid response body",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`invalid`))
-				})
-				return httptest.NewServer(handler)
-			},
-			expectName: "",
-			expectErr:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := tt.setupMock()
-			defer server.Close()
-
-			vs := NewValidationService(server.URL)
-			name, err := vs.FetchUserName(context.Background())
-
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectName, name)
-			}
-		})
-	}
-}
-
-func TestFetchGroupMembers(t *testing.T) {
-	groupID := uuid.New()
-
-	tests := []struct {
-		name        string
-		setupMock   func() *httptest.Server
-		expectErr   bool
-		expectCount int
-	}{
-		{
-			name: "Success",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`[{"id": "123e4567-e89b-12d3-a456-426614174000", "userName": "JohnDoe"}]`))
-				})
-				return httptest.NewServer(handler)
-			},
-			expectErr:   false,
-			expectCount: 1,
-		},
-		{
-			name: "Non-200 status code",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusInternalServerError)
-				})
-				return httptest.NewServer(handler)
-			},
-			expectErr:   true,
-			expectCount: 0,
-		},
-		{
-			name: "Invalid response body",
-			setupMock: func() *httptest.Server {
-				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`invalid`))
-				})
-				return httptest.NewServer(handler)
-			},
-			expectErr:   true,
-			expectCount: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := tt.setupMock()
-			defer server.Close()
-
-			vs := NewValidationService(server.URL)
-			members, err := vs.FetchGroupMembers(context.Background(), groupID)
-
-			if tt.expectErr {
-				assert.Error(t, err)
-				assert.Nil(t, members)
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, members, tt.expectCount)
 			}
 		})
 	}

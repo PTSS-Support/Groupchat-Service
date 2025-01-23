@@ -107,6 +107,9 @@ func TestCreateMessage(t *testing.T) {
 		ctx.Set("groupID", groupID.String())
 		ctx.Set("userID", userID.String())
 
+		ctx.Set("firstName", "Test")
+		ctx.Set("lastName", "User")
+
 		createReq := models.MessageCreate{Content: "test message"}
 		jsonBody, _ := json.Marshal(createReq)
 		ctx.Request = httptest.NewRequest("POST", "/", bytes.NewBuffer(jsonBody))
@@ -115,23 +118,32 @@ func TestCreateMessage(t *testing.T) {
 		mockValidation.On("FetchUserName", mock.Anything).
 			Return("testUser", nil)
 
-		expectedMsg := &models.Message{ID: uuid.New(), Content: createReq.Content}
-		mockMsgService.On("CreateMessage", mock.Anything, groupID, userID, "testUser", createReq).
-			Return(expectedMsg, nil)
+		expectedMsg := &models.Message{
+			ID:      uuid.New(),
+			Content: createReq.Content,
+		}
+		mockMsgService.On("CreateMessage",
+			mock.Anything, // context
+			groupID,
+			userID,
+			"Test User", // userName (first + last name)
+			createReq,   // message create request
+		).Return(expectedMsg, nil)
 
 		controller.CreateMessage(ctx)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
+
 		var response models.Message
 		err := json.Unmarshal(w.Body.Bytes(), &response)
-		if err != nil {
-			return
-		}
+		assert.NoError(t, err)
+
 		assert.Equal(t, expectedMsg.ID, response.ID)
+		assert.Equal(t, expectedMsg.Content, response.Content)
 	})
 
 	t.Run("Invalid request body", func(t *testing.T) {
-		controller, _, mockValidation := setupMessageController()
+		controller, mockMsgService, _ := setupMessageController()
 		w := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(w)
 
@@ -140,11 +152,21 @@ func TestCreateMessage(t *testing.T) {
 		ctx.Set("groupID", groupID.String())
 		ctx.Set("userID", userID.String())
 
+		// Add first and last name to context
+		ctx.Set("firstName", "Test")
+		ctx.Set("lastName", "User")
+
 		ctx.Request = httptest.NewRequest("POST", "/", bytes.NewBuffer([]byte("invalid json")))
 		ctx.Request.Header.Set("Content-Type", "application/json")
 
-		mockValidation.On("FetchUserName", mock.Anything).
-			Return("", nil)
+		// Note: No mock for messageService because invalid body should be caught before service call
+		mockMsgService.On("CreateMessage",
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+		).Return(nil, nil).Maybe()
 
 		controller.CreateMessage(ctx)
 

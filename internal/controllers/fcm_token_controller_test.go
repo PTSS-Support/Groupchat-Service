@@ -59,16 +59,6 @@ func (m *mockValidationService) ValidateToken(token string) error {
 	return args.Error(0)
 }
 
-func (m *mockValidationService) FetchUserName(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
-	return args.String(0), args.Error(1)
-}
-
-func (m *mockValidationService) FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]models.UserSummary, error) {
-	args := m.Called(ctx, groupID)
-	return args.Get(0).([]models.UserSummary), args.Error(1)
-}
-
 func setupTestController() (*fcmTokenController, *mockFCMTokenService, *mockValidationService) {
 	mockFCMService := new(mockFCMTokenService)
 	mockValidation := new(mockValidationService)

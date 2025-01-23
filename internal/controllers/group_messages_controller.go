@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"Groupchat-Service/internal/middleware"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
 
@@ -82,11 +83,14 @@ func (c *FCMMessageController) CreateMessage(ctx *gin.Context) {
 		return
 	}
 
-	userName, err := c.validationService.FetchUserName(ctx.Request.Context())
-	if err != nil {
-		respondWithError(ctx, http.StatusInternalServerError, "Error fetching user name")
+	firstName, firstOk := ctx.Get("firstName")
+	lastName, lastOk := ctx.Get("lastName")
+	if !firstOk || !lastOk {
+		respondWithError(ctx, http.StatusInternalServerError, "User name not found in context")
 		return
 	}
+
+	userName := fmt.Sprintf("%s %s", firstName, lastName)
 
 	var createReq models.MessageCreate
 	if err := ctx.ShouldBindJSON(&createReq); err != nil {
