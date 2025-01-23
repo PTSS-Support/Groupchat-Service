@@ -44,44 +44,13 @@ func (s *messageService) GetMessages(ctx context.Context, groupID uuid.UUID, que
 		return []models.MessageResponse{}, pagination, nil
 	}
 
-	// Fetch group members asynchronously
-	groupMembersChan := make(chan []models.UserSummary)
-	errChan := make(chan error)
-	go func() {
-		groupMembers, err := s.validationService.FetchGroupMembers(ctx, groupID)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		groupMembersChan <- groupMembers
-	}()
-
-	// Wait for group members to be fetched
-	var groupMembers []models.UserSummary
-	select {
-	case groupMembers = <-groupMembersChan:
-	case err = <-errChan:
-		return nil, nil, fmt.Errorf("error fetching group members: %w", err)
-	}
-
-	// Create a map of userID to userName
-	userIDToName := make(map[uuid.UUID]string)
-	for _, member := range groupMembers {
-		userIDToName[member.ID] = member.UserName
-	}
-
-	// Create a slice of MessageResponse
 	var messageResponses []models.MessageResponse
 	for _, message := range messages {
-		senderName := ""
-		if name, ok := userIDToName[message.SenderID]; ok {
-			senderName = name
-		}
 		messageResponses = append(messageResponses, models.MessageResponse{
 			ID:         message.ID,
 			GroupID:    message.GroupID,
 			SenderID:   message.SenderID,
-			SenderName: senderName,
+			SenderName: message.SenderName,
 			Content:    message.Content,
 			SentAt:     message.SentAt,
 			IsPinned:   message.IsPinned,
@@ -98,12 +67,13 @@ func (s *messageService) CreateMessage(ctx context.Context, groupID uuid.UUID, u
 
 	// Create message entity
 	message := &models.Message{
-		ID:       uuid.New(),
-		GroupID:  groupID,
-		SenderID: userID,
-		Content:  sanitizedContent,
-		SentAt:   time.Now().UTC(),
-		IsPinned: false,
+		ID:         uuid.New(),
+		GroupID:    groupID,
+		SenderID:   userID,
+		SenderName: userName,
+		Content:    sanitizedContent,
+		SentAt:     time.Now().UTC(),
+		IsPinned:   false,
 	}
 
 	// Save to database

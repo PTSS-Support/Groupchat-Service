@@ -6,12 +6,13 @@ import (
 )
 
 type Message struct {
-	ID       uuid.UUID `json:"id"`
-	GroupID  uuid.UUID `json:"groupId"`
-	SenderID uuid.UUID `json:"senderId"`
-	Content  string    `json:"content"`
-	SentAt   time.Time `json:"sentAt"`
-	IsPinned bool      `json:"isPinned"`
+	ID         uuid.UUID `json:"id"`
+	GroupID    uuid.UUID `json:"groupId"`
+	SenderID   uuid.UUID `json:"senderId"`
+	SenderName string    `json:"senderName"`
+	Content    string    `json:"content"`
+	SentAt     time.Time `json:"sentAt"`
+	IsPinned   bool      `json:"isPinned"`
 }
 
 type MessageCreate struct {

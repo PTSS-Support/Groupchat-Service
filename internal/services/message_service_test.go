@@ -109,16 +109,6 @@ func (m *MockNotificationService) SendGroupMessage(message Message, deviceTokens
 	return args.Get(0).(*BatchResponse), args.Error(1)
 }
 
-func (m *MockValidationService) FetchUserName(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
-	return args.Get(0).(string), args.Error(1)
-}
-
-func (m *MockValidationService) FetchGroupMembers(ctx context.Context, groupID uuid.UUID) ([]models.UserSummary, error) {
-	args := m.Called(ctx, groupID)
-	return args.Get(0).([]models.UserSummary), args.Error(1)
-}
-
 func TestGetMessages(t *testing.T) {
 	ctx := context.Background()
 	groupID := uuid.New()
@@ -139,18 +129,17 @@ func TestGetMessages(t *testing.T) {
 			setupMocks: func(mr *MockMessageRepository, vs *MockValidationService) {
 				messages := []models.Message{
 					{
-						ID:       uuid.New(),
-						GroupID:  groupID,
-						SenderID: uuid.New(),
-						Content:  "Test message",
-						SentAt:   time.Now(),
+						ID:         uuid.New(),
+						GroupID:    groupID,
+						SenderID:   uuid.New(),
+						SenderName: "TestUser",
+						Content:    "Test message",
+						SentAt:     time.Now(),
+						IsPinned:   false,
 					},
 				}
 				pagination := &models.PaginationResponse{HasNext: false}
 				mr.On("GetMessages", ctx, groupID, query).Return(messages, pagination, nil)
-
-				members := []models.UserSummary{{ID: messages[0].SenderID, UserName: "TestUser"}}
-				vs.On("FetchGroupMembers", ctx, groupID).Return(members, nil)
 			},
 			expectedCount:  1,
 			expectedSender: "TestUser",
@@ -161,16 +150,6 @@ func TestGetMessages(t *testing.T) {
 				mr.On("GetMessages", ctx, groupID, query).Return(nil, &models.PaginationResponse{}, errors.New("db error"))
 			},
 			expectedErr: errors.New("error getting messages from repository: db error"),
-		},
-		{
-			name: "Validation Service Error",
-			setupMocks: func(mr *MockMessageRepository, vs *MockValidationService) {
-				messages := []models.Message{{}}
-				pagination := &models.PaginationResponse{}
-				mr.On("GetMessages", ctx, groupID, query).Return(messages, pagination, nil)
-				vs.On("FetchGroupMembers", ctx, groupID).Return([]models.UserSummary{}, errors.New("validation error"))
-			},
-			expectedErr: errors.New("error fetching group members: validation error"),
 		},
 	}
 
